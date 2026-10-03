@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: haproxy
   rules:
-    - host: coroot-npd.co
+    - host: npd-coroot.co
       http:
         paths:
           - path: /

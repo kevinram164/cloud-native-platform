@@ -1,4 +1,4 @@
-# Coroot CE — metrics + logs + traces (OTLP) + eBPF service map — https://coroot-npd.co
+# Coroot CE — metrics + logs + traces (OTLP) + eBPF service map — https://npd-coroot.co
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: haproxy
   rules:
-    - host: argocd-npd.co
+    - host: npd-argocd.co
       http:
         paths:
           - path: /

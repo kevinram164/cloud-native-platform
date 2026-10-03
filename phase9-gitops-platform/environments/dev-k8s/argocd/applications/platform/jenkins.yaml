@@ -1,4 +1,4 @@
-# Jenkins — https://jenkins-npd.co
+# Jenkins — https://npd-jenkins.co
 # Admin: Vault secret/platform/jenkins {admin_username, admin_password}
 #   → Vault Agent Injector (role jenkins, SA jenkins) → /vault/secrets/admin-* → JCasC readFile
 # Pipeline CI: agent SA jenkins-kaniko (manifests/base) đọc trực tiếp Vault (platform/harbor, platform/github)
@@ -50,7 +50,7 @@ spec:
               {{`{{- with secret "secret/data/platform/jenkins" -}}
               {{- .Data.data.admin_password -}}
               {{- end -}}`}}
-          jenkinsUrl: https://jenkins-npd.co/
+          jenkinsUrl: https://npd-jenkins.co/
           installLatestPlugins: false
           installPlugins:
             - kubernetes:4437.v3a_18554d3f32

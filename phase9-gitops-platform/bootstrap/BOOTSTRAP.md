@@ -60,7 +60,7 @@ STAGE=observability bash phase9-gitops-platform/environments/dev-k8s/apply-argoc
 | # | Bước | Công cụ |
 |---|------|---------|
 | 1 | Push code | GitHub repo app (vd. `banking-demo@dev-k8s`) |
-| 2 | Build + push image | Jenkins + Kaniko → `harbor-npd.co` |
+| 2 | Build + push image | Jenkins + Kaniko → `npd-harbor.co` |
 | 3 | Commit tag | Jenkins → `deploy/dev-k8s/values/values-images.yaml` trong repo app |
 
 ---

@@ -21,7 +21,7 @@ Coroot CE (UI + ClickHouse + cluster-agent + node-agent eBPF)
 
 | Thành phần | Namespace | Domain UI |
 |------------|-----------|-----------|
-| **Coroot** | `observability` | https://coroot-npd.co |
+| **Coroot** | `observability` | https://npd-coroot.co |
 | **OTEL Collector** | `observability` | — (internal) |
 
 ## ArgoCD apply (sau platform + infra)
@@ -36,7 +36,7 @@ STAGE=observability bash phase9-gitops-platform/environments/dev-k8s/apply-argoc
 | 1 | opentelemetry-collector |
 | 2 | coroot-ce |
 
-Ingress `coroot-npd.co` nằm trong `environments/dev-k8s/manifests/ingress/coroot.yaml`.
+Ingress `npd-coroot.co` nằm trong `environments/dev-k8s/manifests/ingress/coroot.yaml`.
 
 ## Instrumentation cho app
 

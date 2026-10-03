@@ -1,4 +1,4 @@
-# Kafka UI (Kafbat) · TLS + SCRAM — https://kafka-ui-npd.co
+# Kafka UI (Kafbat) · TLS + SCRAM — https://npd-kafka-ui.co
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

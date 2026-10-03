@@ -1,5 +1,5 @@
 # Coroot CE — dev-k8s (namespace observability)
-# UI: https://coroot-npd.co (manifests/ingress/coroot.yaml)
+# UI: https://npd-coroot.co (manifests/ingress/coroot.yaml)
 # OTLP: coroot-coroot.observability:4317 (gRPC) / :8080 (HTTP)
 
 storage:

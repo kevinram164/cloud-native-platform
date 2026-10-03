@@ -30,13 +30,13 @@ DNS (hoặc `hosts` trên máy client) trỏ các tên sau về `10.100.1.100`:
 
 | Tên | Đích trong cụm | Repo |
 |-----|----------------|------|
-| `argocd-npd.co` | `argocd/argocd-server:80` | platform |
-| `harbor-npd.co` | `platform/harbor:80` | platform |
-| `jenkins-npd.co` | `platform/jenkins:8080` | platform |
-| `vault-npd.co` | `vault/vault:8200` | platform |
-| `coroot-npd.co` | `observability/coroot-coroot:8080` | platform |
-| `kafka-ui-npd.co` | `kafka/kafka-ui:80` | platform |
-| `banking-npd.co` | Ingress `npd-banking` (frontend + Kong) | banking-demo |
+| `npd-argocd.co` | `argocd/argocd-server:80` | platform |
+| `npd-harbor.co` | `platform/harbor:80` | platform |
+| `npd-jenkins.co` | `platform/jenkins:8080` | platform |
+| `npd-vault.co` | `vault/vault:8200` | platform |
+| `npd-coroot.co` | `observability/coroot-coroot:8080` | platform |
+| `npd-kafka-ui.co` | `kafka/kafka-ui:80` | platform |
+| `npd-banking.co` | Ingress `npd-banking` (frontend + Kong) | banking-demo |
 
 NGINX Plus trên f5-lb cần upstream `10.100.1.46:80` cho các server name trên, kèm `proxy_set_header Host $host` và `X-Forwarded-Proto https`. Với Harbor, đặt `client_max_body_size 0`.
 
@@ -59,7 +59,7 @@ helm upgrade --install argocd argo/argo-cd -n argocd \
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d; echo
 ```
 
-`server.insecure=true` vì TLS đã kết thúc ở f5-lb. Ingress `argocd-npd.co` do Application `platform-ingress` tạo ở bước sau. Trước đó có thể dùng `kubectl port-forward svc/argocd-server -n argocd 8080:80`.
+`server.insecure=true` vì TLS đã kết thúc ở f5-lb. Ingress `npd-argocd.co` do Application `platform-ingress` tạo ở bước sau. Trước đó có thể dùng `kubectl port-forward svc/argocd-server -n argocd 8080:80`.
 
 Repo GitHub public nên ArgoCD không cần credential.
 
@@ -125,7 +125,7 @@ bash nfs-reuse-prepare.sh --apply --fresh-observability     # chown + dời obse
 
 Export `/shares/registry` nên có `no_root_squash` (kubelet đổi group theo `fsGroup`); script in ra `exportfs -v` để kiểm tra.
 
-**Bước 2 — Vault (data cũ):** không chạy `vault operator init`. Chỉ cần unseal bằng key cũ, rồi dùng root token cũ. KV `secret/` và các secret đã seed vẫn còn; kiểm tra lại giá trị (host Harbor `harbor-npd.co` trong `platform/harbor`, `platform/harbor-pull`). Chạy `vault-setup-k8s-auth.sh` để ghi lại auth kubernetes cho cụm mới (CA, host, role mới). Mất unseal key thì không mở được data: dời `vault/data-vault-0` đi và init mới.
+**Bước 2 — Vault (data cũ):** không chạy `vault operator init`. Chỉ cần unseal bằng key cũ, rồi dùng root token cũ. KV `secret/` và các secret đã seed vẫn còn; kiểm tra lại giá trị (host Harbor `npd-harbor.co` trong `platform/harbor`, `platform/harbor-pull`). Chạy `vault-setup-k8s-auth.sh` để ghi lại auth kubernetes cho cụm mới (CA, host, role mới). Mất unseal key thì không mở được data: dời `vault/data-vault-0` đi và init mới.
 
 **Bước 3 — Kafka KRaft:** Strimzi sinh cluster ID mới cho Kafka CR mới, trong khi broker đọc `meta.properties` cũ → lỗi `Invalid cluster.id`. Application `infra-kafka` đang để `pauseReconciliation: true`, nên Strimzi tạo CR nhưng chưa dựng broker. Sau khi `infra-kafka` sync:
 
@@ -173,8 +173,8 @@ alias v='kubectl exec -i -n vault vault-0 -- env VAULT_ADDR=http://127.0.0.1:820
 
 v secrets enable -path=secret kv-v2
 v kv put secret/platform/jenkins admin_username=admin admin_password='<pass>'
-v kv put secret/platform/harbor registry=harbor-npd.co username='robot$banking-demo+ci' password='<token>'
-v kv put secret/platform/harbor-pull registry=harbor-npd.co username='robot$banking-demo+k8s-pull' password='<token>'
+v kv put secret/platform/harbor registry=npd-harbor.co username='robot$banking-demo+ci' password='<token>'
+v kv put secret/platform/harbor-pull registry=npd-harbor.co username='robot$banking-demo+k8s-pull' password='<token>'
 v kv put secret/platform/github username=<user> pat='<pat>'
 v kv put secret/rabbitmq/admin username=banking password='<pass>'
 v kv put secret/banking/db \
@@ -204,28 +204,28 @@ VAULT_TOKEN=<token> bash phase9-gitops-platform/environments/dev-k8s/scripts/cre
 
 ### Registry trust trên node
 
-containerd trên mọi node phải tin cert của `harbor-npd.co` (cert do f5-lb cấp). Với CA nội bộ:
+containerd trên mọi node phải tin cert của `npd-harbor.co` (cert do f5-lb cấp). Với CA nội bộ:
 
 ```bash
-mkdir -p /etc/containerd/certs.d/harbor-npd.co
-cp npd-ca.crt /etc/containerd/certs.d/harbor-npd.co/ca.crt
-cat > /etc/containerd/certs.d/harbor-npd.co/hosts.toml <<'EOF'
-server = "https://harbor-npd.co"
-[host."https://harbor-npd.co"]
+mkdir -p /etc/containerd/certs.d/npd-harbor.co
+cp npd-ca.crt /etc/containerd/certs.d/npd-harbor.co/ca.crt
+cat > /etc/containerd/certs.d/npd-harbor.co/hosts.toml <<'EOF'
+server = "https://npd-harbor.co"
+[host."https://npd-harbor.co"]
   capabilities = ["pull", "resolve"]
-  ca = "/etc/containerd/certs.d/harbor-npd.co/ca.crt"
+  ca = "/etc/containerd/certs.d/npd-harbor.co/ca.crt"
 EOF
 # containerd config: [plugins."io.containerd.grpc.v1.cri".registry] config_path = "/etc/containerd/certs.d"
 systemctl restart containerd
 ```
 
-Node cũng phải phân giải được `harbor-npd.co` về `10.100.1.100`.
+Node cũng phải phân giải được `npd-harbor.co` về `10.100.1.100`.
 
 ## 6. CI (Jenkins → Harbor → GitOps)
 
 - Harbor: tạo project `banking-demo`, robot `ci` (push) lưu vào `platform/harbor`, robot `k8s-pull` (pull) lưu vào `platform/harbor-pull`.
 - Jenkins: Multibranch Pipeline repo `banking-demo`, nhánh `dev-k8s`, Script Path `Jenkinsfile`.
-- Pipeline build bằng Kaniko, push `harbor-npd.co/banking-demo/<svc>`, rồi bump `tag` trong `deploy/dev-k8s/values/values-images.yaml` của chính repo `banking-demo`. ArgoCD project `banking` sync.
+- Pipeline build bằng Kaniko, push `npd-harbor.co/banking-demo/<svc>`, rồi bump `tag` trong `deploy/dev-k8s/values/values-images.yaml` của chính repo `banking-demo`. ArgoCD project `banking` sync.
 
 ## 7. Triển khai banking (repo `banking-demo`)
 
@@ -247,7 +247,7 @@ kubectl get pods -n vault                      # vault-0 + vault-agent-injector
 kubectl get ingress -A
 kubectl get pvc -A
 kubectl logs -n npd-banking deploy/auth-service -c vault-agent-init
-curl -sI https://banking-npd.co
+curl -sI https://npd-banking.co
 ```
 
 | Triệu chứng | Kiểm tra |
@@ -258,6 +258,6 @@ curl -sI https://banking-npd.co
 | Pod kẹt `Init:0/1` (`vault-agent-init`) | Vault sealed; role/SA/namespace sai; path chưa seed → log container `vault-agent-init` |
 | Pod không có `vault-agent-init` | Injector chưa chạy (`kubectl get pods -n vault`), annotation sai, pod tạo trước khi injector sẵn sàng → restart pod |
 | `/vault/secrets/env: not found` | Annotation template thiếu; kiểm tra `agent-inject-secret-env` |
-| ImagePullBackOff | containerd trust `harbor-npd.co`, Secret `harbor-pull-creds` trong namespace của app |
+| ImagePullBackOff | containerd trust `npd-harbor.co`, Secret `harbor-pull-creds` trong namespace của app |
 | Jenkins không đăng nhập được | `kubectl exec -n platform jenkins-0 -c jenkins -- cat /vault/secrets/admin-user` |
 | `platform-ingress` lỗi namespace | Bình thường đến khi infra/observability tạo ns `kafka`, `observability` — app tự retry |

@@ -1,4 +1,4 @@
-# Harbor — https://harbor-npd.co (TLS kết thúc ở f5-lb, Ingress HAProxy → svc harbor:80)
+# Harbor — https://npd-harbor.co (TLS kết thúc ở f5-lb, Ingress HAProxy → svc harbor:80)
 # Xem harbor/README.md: admin password, robot accounts
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -22,7 +22,7 @@ spec:
           type: clusterIP
           tls:
             enabled: false
-        externalURL: https://harbor-npd.co
+        externalURL: https://npd-harbor.co
         harborAdminPassword: "ChangeMe-Harbor-Admin"
         internalTLS:
           enabled: false

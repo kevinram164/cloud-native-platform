@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: haproxy
   rules:
-    - host: kafka-ui-npd.co
+    - host: npd-kafka-ui.co
       http:
         paths:
           - path: /

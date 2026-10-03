@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: haproxy
   rules:
-    - host: jenkins-npd.co
+    - host: npd-jenkins.co
       http:
         paths:
           - path: /

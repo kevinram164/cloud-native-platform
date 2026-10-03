@@ -22,4 +22,4 @@ case "$STAGE" in
   *) echo "STAGE không hợp lệ: $STAGE" >&2; exit 1 ;;
 esac
 
-echo "ArgoCD: https://argocd-npd.co"
+echo "ArgoCD: https://npd-argocd.co"

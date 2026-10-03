@@ -8,7 +8,7 @@ metadata:
 spec:
   ingressClassName: haproxy
   rules:
-    - host: vault-npd.co
+    - host: npd-vault.co
       http:
         paths:
           - path: /

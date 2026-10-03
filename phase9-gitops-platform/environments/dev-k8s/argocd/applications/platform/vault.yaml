@@ -1,4 +1,4 @@
-# HashiCorp Vault — https://vault-npd.co (standalone, file storage trên nfs-csi)
+# HashiCorp Vault — https://npd-vault.co (standalone, file storage trên nfs-csi)
 # Sau MỖI lần pod restart: vault operator unseal (3/5 key từ operator init).
 apiVersion: argoproj.io/v1alpha1
 kind: Application

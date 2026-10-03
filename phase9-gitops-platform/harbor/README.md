@@ -6,7 +6,7 @@ Registry nội bộ cho CI (Jenkins Kaniko) và CD (kubelet pull image).
 
 | | |
 |--|--|
-| UI | **https://harbor-npd.co** |
+| UI | **https://npd-harbor.co** |
 | Ingress | f5-lb NGINX Plus (TLS) → HAProxy ingress (`haproxy`) trên npd-route `10.100.1.46` |
 | StorageClass | `nfs-csi` (NFS `10.100.1.180:/shares/registry`) |
 
@@ -24,7 +24,7 @@ Kubelet pull image trước khi bất kỳ container nào (kể cả Vault Agent
 
 ```bash
 v kv put secret/platform/harbor-pull \
-  registry='harbor-npd.co' \
+  registry='npd-harbor.co' \
   username='robot$banking-demo+k8s-pull' \
   password='<TOKEN>'
 
@@ -38,11 +38,11 @@ Chart banking dùng secret này qua `imagePullSecrets` trong `deploy/dev-k8s/val
 ## Image naming
 
 ```text
-harbor-npd.co/banking-demo/api-producer:<sha>
-harbor-npd.co/banking-demo/auth-service:<sha>
+npd-harbor.co/banking-demo/api-producer:<sha>
+npd-harbor.co/banking-demo/auth-service:<sha>
 ...
 ```
 
 ## TLS
 
-f5-lb terminate TLS cho `harbor-npd.co`; containerd mỗi node cần trust CA, xem [K8S-DEPLOY-GUIDE.md](../K8S-DEPLOY-GUIDE.md) mục 5. Kaniko dùng `kanikoSkipTlsVerify: true` (lab).
+f5-lb terminate TLS cho `npd-harbor.co`; containerd mỗi node cần trust CA, xem [K8S-DEPLOY-GUIDE.md](../K8S-DEPLOY-GUIDE.md) mục 5. Kaniko dùng `kanikoSkipTlsVerify: true` (lab).

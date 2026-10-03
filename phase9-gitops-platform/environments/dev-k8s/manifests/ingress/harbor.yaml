@@ -9,7 +9,7 @@ metadata:
 spec:
   ingressClassName: haproxy
   rules:
-    - host: harbor-npd.co
+    - host: npd-harbor.co
       http:
         paths:
           - path: /

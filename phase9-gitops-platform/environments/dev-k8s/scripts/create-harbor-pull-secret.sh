@@ -3,7 +3,7 @@
 # Kubelet pull image TRƯỚC khi container nào (kể cả Vault Agent) chạy, nên imagePullSecrets bắt buộc
 # phải là Secret K8s — Vault Agent Injector không thay được. Chạy lại khi rotate robot token.
 #
-#   vault kv put secret/platform/harbor-pull registry=harbor-npd.co \
+#   vault kv put secret/platform/harbor-pull registry=npd-harbor.co \
 #     username='robot$banking-demo+k8s-pull' password='<token>'
 #   export VAULT_TOKEN=...
 #   bash create-harbor-pull-secret.sh                 # mặc định ns npd-banking

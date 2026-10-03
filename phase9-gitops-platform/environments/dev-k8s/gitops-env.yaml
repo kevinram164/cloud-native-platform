@@ -4,7 +4,7 @@ platform:
   branch: main
 
 harbor:
-  host: harbor-npd.co
+  host: npd-harbor.co
 
 jenkins:
   namespace: platform
@@ -30,9 +30,9 @@ cluster:
     share: /shares/registry
 
 domains:
-  argocd: argocd-npd.co
-  harbor: harbor-npd.co
-  jenkins: jenkins-npd.co
-  vault: vault-npd.co
-  coroot: coroot-npd.co
-  kafkaUi: kafka-ui-npd.co
+  argocd: npd-argocd.co
+  harbor: npd-harbor.co
+  jenkins: npd-jenkins.co
+  vault: npd-vault.co
+  coroot: npd-coroot.co
+  kafkaUi: npd-kafka-ui.co

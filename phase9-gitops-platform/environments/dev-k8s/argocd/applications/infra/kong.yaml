@@ -1,6 +1,6 @@
 # Kong HA DB mode — Phase 5, ns kong
 # PreSync hooks (manifests/kong-prereq): chờ Postgres Ready → tạo DB kong → rồi mới deploy chart
-# Sau sync: chạy kong-import-job Phase 8 (CORS origin https://banking-npd.co)
+# Sau sync: chạy kong-import-job Phase 8 (CORS origin https://npd-banking.co)
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
