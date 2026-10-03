@@ -1,0 +1,6 @@
+# SA cho pod agent Kaniko (platformPipeline) — Vault role jenkins-kaniko bind SA này
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jenkins-kaniko
+  namespace: platform

@@ -1,0 +1,45 @@
+# Kafka cluster (chart local npd-kafka) · ns kafka — dùng chung banking, npd-shop
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-kafka
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: kafka
+    npd/shared-platform: "true"
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kevinram164/cloud-native-platform.git
+    targetRevision: main
+    path: phase9-gitops-platform/kafka/charts/npd-kafka
+    helm:
+      releaseName: npd-kafka
+      valueFiles:
+        - values.yaml
+      values: |
+        # Dùng lại PVC từ cụm OCP: giữ true đến khi patch status.clusterId về cluster.id cũ,
+        # sau đó đổi false + commit (K8S-DEPLOY-GUIDE mục 4). Cluster mới hoàn toàn: đặt false.
+        # cluster.id cũ (NFS kafka/data-0-npd-kafka-dual-role-*/kafka-log*/meta.properties): n1yOEdG2SuS58OX05BgOgg
+        pauseReconciliation: true
+        nodePool:
+          securityContext:
+            fsGroup: 1001
+            fsGroupChangePolicy: OnRootMismatch
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kafka
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: false
+      selfHeal: false
+  ignoreDifferences:
+    - group: kafka.strimzi.io
+      kind: Kafka
+      jsonPointers:
+        - /status

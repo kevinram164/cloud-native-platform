@@ -9,6 +9,9 @@ metadata:
   annotations:
     strimzi.io/node-pools: enabled
     strimzi.io/kraft: enabled
+    {{- if .Values.pauseReconciliation }}
+    strimzi.io/pause-reconciliation: "true"
+    {{- end }}
 spec:
   kafka:
     version: {{ .Values.kafkaVersion | quote }}

@@ -1,0 +1,130 @@
+# RabbitMQ standalone — ns rabbit, official image + prometheus metrics :15692
+# Credential admin: Vault secret/rabbitmq/admin {username, password}
+#   → Vault Agent Injector render /vault/secrets/env, container source rồi exec entrypoint gốc.
+# RABBITMQ_DEFAULT_USER/PASS chỉ có hiệu lực lần đầu (data dir rỗng).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rabbitmq
+  namespace: rabbit
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-enabled-plugins
+  namespace: rabbit
+  labels:
+    app: rabbitmq
+data:
+  enabled_plugins: |
+    [rabbitmq_management,rabbitmq_prometheus].
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data
+  namespace: rabbit
+spec:
+  storageClassName: nfs-csi
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 8Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: rabbit
+  labels:
+    app: rabbitmq
+    app.kubernetes.io/name: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        app.kubernetes.io/name: rabbitmq
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-init-first: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: "rabbitmq"
+        vault.hashicorp.com/agent-inject-secret-env: "secret/data/rabbitmq/admin"
+        vault.hashicorp.com/agent-inject-template-env: |
+          {{ with secret "secret/data/rabbitmq/admin" }}
+          export RABBITMQ_DEFAULT_USER='{{ .Data.data.username }}'
+          export RABBITMQ_DEFAULT_PASS='{{ .Data.data.password }}'
+          {{ end }}
+    spec:
+      serviceAccountName: rabbitmq
+      securityContext:
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:3.12-management
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - . /vault/secrets/env && exec docker-entrypoint.sh rabbitmq-server
+          ports:
+            - containerPort: 5672
+              name: amqp
+            - containerPort: 15672
+              name: management
+            - containerPort: 15692
+              name: prometheus
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+            - name: enabled-plugins
+              mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+              readOnly: true
+          readinessProbe:
+            tcpSocket:
+              port: amqp
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
+        - name: enabled-plugins
+          configMap:
+            name: rabbitmq-enabled-plugins
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: rabbit
+  labels:
+    app: rabbitmq
+    app.kubernetes.io/name: rabbitmq
+spec:
+  selector:
+    app: rabbitmq
+  ports:
+    - port: 5672
+      targetPort: amqp
+      name: amqp
+    - port: 15672
+      targetPort: management
+      name: management
+    - port: 15692
+      targetPort: prometheus
+      name: metrics

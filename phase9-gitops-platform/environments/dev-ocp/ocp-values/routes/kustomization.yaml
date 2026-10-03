@@ -8,8 +8,4 @@ resources:
   - coroot-route.yaml
   - keycloak-route.yaml
   - kafka-ui-route.yaml
-  - banking-kong-proxy-ext.yaml
-  - banking-route-frontend.yaml
-  - banking-route-api.yaml
-  - banking-route-ws.yaml
   - kong-route.yaml

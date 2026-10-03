@@ -1,0 +1,31 @@
+# NFS CSI driver — kube-system (không cần PodSecurity label riêng)
+# StorageClass nfs-csi: platform-k8s-base (manifests/base)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-csi-driver-nfs
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: storage
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  project: platform
+  source:
+    repoURL: https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
+    chart: csi-driver-nfs
+    targetRevision: 4.11.0
+    helm:
+      releaseName: csi-driver-nfs
+      values: |
+        controller:
+          replicas: 2
+        kubeletDir: /var/lib/kubelet
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true

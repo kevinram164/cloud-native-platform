@@ -1,5 +1,7 @@
 # GitOps Platform — ArgoCD manifests (Phase 9)
 
+> **Legacy (OpenShift `dev-ocp`), chỉ tham khảo.** `dev-k8s` dùng Application riêng trong `environments/dev-k8s/argocd/`. Banking, ESO, Istio, Linkerd đã bị xóa.
+
 ## Cấu trúc
 
 ```

@@ -1,5 +1,7 @@
 # Giai đoạn 9: GitOps Platform — CI trong K8s, CD ArgoCD
 
+> **Tài liệu thiết kế ban đầu (k3d/OpenShift), giữ để tham khảo.** Kiến trúc hiện tại trên cụm `dev-k8s`: platform và infra ở repo này, app ở repo riêng, secret qua Vault Agent Injector (không ESO), không service mesh. Xem [README.md](./README.md) và [K8S-DEPLOY-GUIDE.md](./K8S-DEPLOY-GUIDE.md).
+
 Phase 9 gom **platform** (Jenkins, Harbor, Vault, External Secrets) và **luồng GitOps** cho banking-demo **Phase 8** trên nền kiến trúc **Phase 5** (namespace tách: `banking`, `kong`, `redis`, `postgres`, `rabbit`).
 
 ## Mục tiêu

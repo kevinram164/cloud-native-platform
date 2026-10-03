@@ -1,0 +1,25 @@
+# StorageClass nfs-csi + SA jenkins-kaniko — trước mọi PVC
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-k8s-base
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kevinram164/cloud-native-platform.git
+    targetRevision: main
+    path: phase9-gitops-platform/environments/dev-k8s/manifests/base
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

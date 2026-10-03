@@ -1,0 +1,24 @@
+# StorageClass nfs-csi — cùng server/share/subDir với cụm OCP cũ
+# → PVC cùng namespace + tên sẽ mount lại folder cũ /shares/registry/<ns>/<pvc>.
+# Retain: xóa PVC không xóa dữ liệu NFS.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-csi
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    platform/environment: dev-k8s
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: "10.100.1.180"
+  share: "/shares/registry"
+  subDir: "${pvc.metadata.namespace}/${pvc.metadata.name}"
+  mountPermissions: "0777"
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+mountOptions:
+  - nfsvers=4.1
+  - hard
+  - timeo=600

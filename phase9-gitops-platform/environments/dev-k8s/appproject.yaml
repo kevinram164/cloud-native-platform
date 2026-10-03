@@ -1,0 +1,74 @@
+# AppProject platform — dev-k8s (kubeadm + Cilium + HAProxy ingress)
+# Platform (Jenkins, Harbor, Vault, observability) + infra dùng chung (Postgres, Redis, RabbitMQ, Kong, Kafka).
+# Ứng dụng banking thuộc AppProject banking ở repo banking-demo (deploy/dev-k8s).
+# Áp dụng: kubectl apply -f phase9-gitops-platform/environments/dev-k8s/appproject.yaml -n argocd
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: platform
+    app.kubernetes.io/part-of: cloud-native-platform
+    platform/environment: dev-k8s
+spec:
+  description: "cloud-native-platform — dev-k8s"
+  sourceRepos:
+    - https://github.com/kevinram164/cloud-native-platform.git
+    - https://raw.githubusercontent.com/kubernetes-csi/csi-driver-nfs/master/charts
+    - https://charts.bitnami.com/bitnami
+    - https://charts.konghq.com
+    - https://helm.releases.hashicorp.com
+    - https://helm.goharbor.io
+    - https://charts.jenkins.io
+    - https://coroot.github.io/helm-charts
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+    - https://strimzi.io/charts/
+    - https://kafbat.github.io/helm-charts
+  destinations:
+    - namespace: kong
+      server: https://kubernetes.default.svc
+    - namespace: redis
+      server: https://kubernetes.default.svc
+    - namespace: postgres
+      server: https://kubernetes.default.svc
+    - namespace: rabbit
+      server: https://kubernetes.default.svc
+    - namespace: kafka
+      server: https://kubernetes.default.svc
+    - namespace: platform
+      server: https://kubernetes.default.svc
+    - namespace: vault
+      server: https://kubernetes.default.svc
+    - namespace: observability
+      server: https://kubernetes.default.svc
+    - namespace: kube-system
+      server: https://kubernetes.default.svc
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: storage.k8s.io
+      kind: StorageClass
+    - group: storage.k8s.io
+      kind: CSIDriver
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: apiregistration.k8s.io
+      kind: APIService
+    - group: coroot.com
+      kind: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  orphanedResources:
+    warn: true

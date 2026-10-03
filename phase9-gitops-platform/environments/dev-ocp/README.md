@@ -1,5 +1,7 @@
 # Environment: dev-ocp (OpenShift — ocp01.npd.co)
 
+> **Legacy, chỉ tham khảo.** Cụm đã gỡ; banking, ESO, Istio, Linkerd đã bị xóa khỏi repo. Môi trường hiện tại: [dev-k8s](../dev-k8s/).
+
 Cấu hình ArgoCD + GitOps cho nhánh **`dev-ocp`** trên cluster **OpenShift**.
 
 **Hướng dẫn đầy đủ:** [OCP-DEPLOY-GUIDE.md](../../OCP-DEPLOY-GUIDE.md)

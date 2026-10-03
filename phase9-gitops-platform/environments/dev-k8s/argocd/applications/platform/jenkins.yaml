@@ -1,0 +1,131 @@
+# Jenkins — https://jenkins-npd.co
+# Admin: Vault secret/platform/jenkins {admin_username, admin_password}
+#   → Vault Agent Injector (role jenkins, SA jenkins) → /vault/secrets/admin-* → JCasC readFile
+# Pipeline CI: agent SA jenkins-kaniko (manifests/base) đọc trực tiếp Vault (platform/harbor, platform/github)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-jenkins
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: platform
+  source:
+    repoURL: https://charts.jenkins.io
+    chart: jenkins
+    targetRevision: 5.7.27
+    helm:
+      releaseName: jenkins
+      values: |
+        persistence:
+          enabled: true
+          storageClass: nfs-csi
+          size: 8Gi
+          accessMode: ReadWriteOnce
+        controller:
+          image:
+            registry: docker.io
+            repository: jenkins/jenkins
+            tag: "lts-jdk17"
+            pullPolicy: Always
+          admin:
+            createSecret: false
+          # Chart chạy tpl trên podAnnotations: template Vault bọc trong {{` `}} để Helm giữ nguyên.
+          # Viết nhiều dòng + trim (-) để toYaml không gập dòng và file render không có newline.
+          podAnnotations:
+            vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/agent-init-first: "true"
+            vault.hashicorp.com/agent-pre-populate-only: "true"
+            vault.hashicorp.com/role: "jenkins"
+            vault.hashicorp.com/agent-inject-secret-admin-user: "secret/data/platform/jenkins"
+            vault.hashicorp.com/agent-inject-template-admin-user: |-
+              {{`{{- with secret "secret/data/platform/jenkins" -}}
+              {{- .Data.data.admin_username -}}
+              {{- end -}}`}}
+            vault.hashicorp.com/agent-inject-secret-admin-password: "secret/data/platform/jenkins"
+            vault.hashicorp.com/agent-inject-template-admin-password: |-
+              {{`{{- with secret "secret/data/platform/jenkins" -}}
+              {{- .Data.data.admin_password -}}
+              {{- end -}}`}}
+          jenkinsUrl: https://jenkins-npd.co/
+          installLatestPlugins: false
+          installPlugins:
+            - kubernetes:4437.v3a_18554d3f32
+            - workflow-aggregator:608.v67378e9d3db_1
+            - pipeline-model-api:2.2255.v56a_15e805f12
+            - pipeline-model-definition:2.2255.v56a_15e805f12
+            - pipeline-model-extensions:2.2255.v56a_15e805f12
+            - workflow-multibranch:821.vc3b_4ea_780798
+            - git:5.10.1
+            - configuration-as-code:2100.vb_fd699d2a_09c
+            - pipeline-groovy-lib:798.v5cc688825312
+            - durable-task:686.v80ff80875b_82
+            - pipeline-utility-steps:2.19.0
+          additionalPlugins: []
+          overwritePlugins: true
+          overwritePluginsFromImage: false
+          initializeOnce: false
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+          javaOpts: >-
+            -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.HEARTBEAT_CHECK_INTERVAL=86400
+            -Dorg.jenkinsci.plugins.durabletask.BourneShellScript.USE_BINARY_WRAPPER=true
+          initContainerResources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 2Gi
+          JCasC:
+            defaultConfig: true
+            securityRealm: |-
+              local:
+                allowsSignup: false
+                enableCaptcha: false
+                users:
+                  - id: "${readFile:/vault/secrets/admin-user}"
+                    name: "Jenkins Admin"
+                    password: "${readFile:/vault/secrets/admin-password}"
+            configScripts:
+              banking-shared-library: |
+                unclassified:
+                  globalLibraries:
+                    libraries:
+                      - name: "platform"
+                        defaultVersion: "main"
+                        retriever:
+                          modernSCM:
+                            libraryPath: ""
+                            scm:
+                              git:
+                                remote: "https://github.com/kevinram164/jenkins-shared-library.git"
+                      - name: "banking-demo"
+                        defaultVersion: "main"
+                        retriever:
+                          modernSCM:
+                            libraryPath: ""
+                            scm:
+                              git:
+                                remote: "https://github.com/kevinram164/jenkins-shared-library.git"
+          ingress:
+            enabled: false
+        agent:
+          enabled: true
+          kubernetes:
+            namespace: platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: platform
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

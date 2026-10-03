@@ -1,101 +1,46 @@
-# Observability — Coroot + OpenTelemetry + Linkerd (k3d lab)
+# Observability — Coroot + OpenTelemetry
 
-Stack thống nhất cho **metrics, logs, traces** và **service mesh** trên nhánh `dev-k3d`.
+Stack thống nhất cho **metrics, logs, traces**. Không dùng service mesh: Cilium lo CNI/network policy, Coroot node-agent (eBPF) thấy traffic giữa các service mà không cần sidecar.
+
+Môi trường `dev-k8s` dùng values trong `environments/dev-k8s/values/` (`values-coroot-ce.yaml`, `values-otel-collector.yaml`). Các file `values-*-k3d.yaml` / `-ocp.yaml` ở đây là bản cũ cho OpenShift.
 
 ## Kiến trúc
 
 ```text
-Banking pods (ns banking, Linkerd sidecar)
+App pods (vd. npd-banking)
     │ OTLP gRPC :4317
     ▼
 OpenTelemetry Collector (ns observability)
     │ OTLP → Coroot
     ▼
-Coroot CE (UI + ClickHouse + cluster-agent)
-    ├── Metrics (OTLP + cluster-agent; node-agent eBPF tắt trên k3d/WSL2)
-    ├── Logs (OTLP)
-    └── Traces (OTLP gRPC/HTTP)
-
-Linkerd (ns linkerd) — mTLS mesh, Viz dashboard
+Coroot CE (UI + ClickHouse + cluster-agent + node-agent eBPF)
+    ├── Metrics
+    ├── Logs
+    └── Traces
 ```
 
 | Thành phần | Namespace | Domain UI |
 |------------|-----------|-----------|
 | **Coroot** | `observability` | https://coroot-npd.co |
 | **OTEL Collector** | `observability` | — (internal) |
-| **Linkerd Viz** | `linkerd-viz` | https://linkerd-npd.co |
 
-## ArgoCD apply (Giai đoạn 2b — sau platform, trước infra)
+## ArgoCD apply (sau platform + infra)
 
 ```bash
-# Linkerd: cert trong manifests/linkerd-identity-k3d/certs/ (Kustomize wave 0)
-
-# 2. Sync observability apps
-kubectl apply -f phase9-gitops-platform/environments/dev-k3d/argocd/applications/observability-app-of-apps.yaml -n argocd
+STAGE=observability bash phase9-gitops-platform/environments/dev-k8s/apply-argocd.sh
 ```
-
-Thứ tự sync wave:
 
 | Wave | App |
 |------|-----|
-| 0 | coroot-operator, linkerd-crds, linkerd-identity-bootstrap |
-| 1 | otel-collector, linkerd-control-plane |
-| 2 | coroot-ce, linkerd-viz |
+| 0 | coroot-operator |
+| 1 | opentelemetry-collector |
+| 2 | coroot-ce |
 
-## Nginx + Ingress (WSL2)
+Ingress `coroot-npd.co` nằm trong `environments/dev-k8s/manifests/ingress/coroot.yaml`.
 
-```bash
-sudo cp k3d/nginx-coroot-npd.co.conf /etc/nginx/conf.d/
-sudo cp k3d/nginx-linkerd-npd.co.conf /etc/nginx/conf.d/
-kubectl apply -f k3d/coroot-ingress.yaml
-kubectl apply -f k3d/linkerd-viz-ingress.yaml
-sudo nginx -t && sudo systemctl reload nginx
-```
+## Instrumentation cho app
 
-Windows `hosts`:
+App tự khai báo OTEL trong repo của nó, ví dụ banking: `banking-demo/deploy/dev-k8s/values/values-observability.yaml`:
 
-```text
-127.0.0.1   coroot-npd.co
-127.0.0.1   linkerd-npd.co
-```
-
-## Banking app instrumentation
-
-`gitops/values-observability.yaml` được merge vào mọi banking Helm app:
-
-- `OTEL_EXPORTER_OTLP_ENDPOINT` → `opentelemetry-collector.observability:4317`
-- Namespace `banking` annotation `linkerd.io/inject: enabled`
-
-Sau khi deploy Linkerd, **restart banking pods** để inject sidecar:
-
-```bash
-kubectl rollout restart deployment -n banking
-linkerd check
-linkerd viz tap deploy/auth-service -n banking
-```
-
-## Coroot vs Phase 3 (Grafana/Loki/Tempo)
-
-| | Phase 3 | Phase 9 (k3d) |
-|--|---------|---------------|
-| Metrics | Prometheus | Coroot OTLP (+ eBPF trên cluster thật) |
-| Logs | Loki + Promtail | Coroot OTLP |
-| Traces | Tempo + OTEL | Coroot OTLP |
-| UI | Grafana | Coroot |
-| Mesh | — | Linkerd |
-
-Phase 3 vẫn giữ trong repo cho cluster production-like; k3d lab dùng Coroot stack.
-
-## RAM khuyến nghị
-
-Coroot + ClickHouse + Linkerd cần thêm **~4–6 GB RAM**. Tổng lab full stack: **≥ 24 GB** WSL2.
-
-## Files
-
-| File | Mục đích |
-|------|----------|
-| `values-coroot-ce-k3d.yaml` | Coroot CE, local-path storage |
-| `values-otel-collector-k3d.yaml` | OTLP gateway → Coroot |
-| `values-linkerd-k3d.yaml` | Linkerd k3d (cniEnabled=false) |
-| `gitops/values-observability.yaml` | OTEL env + mesh inject cho banking |
-| `scripts/generate-linkerd-certs.sh` | Trust anchor + issuer secret |
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://opentelemetry-collector.observability.svc.cluster.local:4317`
+- `OTEL_RESOURCE_ATTRIBUTES=deployment.environment=dev-k8s,k8s.namespace.name=<ns>,k8s.cluster.name=npd-k8s`

@@ -1,0 +1,31 @@
+# Root App of Apps — dev-k8s
+# CHỈ apply sau khi platform + infra + observability đã chạy OK (quản lý tập trung).
+# Giai đoạn đầu: apply riêng platform → infra → observability. Banking: repo banking-demo.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: platform-root-dev-k8s
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    platform/environment: dev-k8s
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kevinram164/cloud-native-platform.git
+    targetRevision: main
+    path: phase9-gitops-platform/environments/dev-k8s/argocd/applications
+    directory:
+      include: "*-app-of-apps.yaml"
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

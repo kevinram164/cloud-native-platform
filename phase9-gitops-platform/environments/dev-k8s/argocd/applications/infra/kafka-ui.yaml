@@ -1,0 +1,65 @@
+# Kafka UI (Kafbat) · TLS + SCRAM — https://kafka-ui-npd.co
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-kafka-ui
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: kafka-ui
+    npd/shared-platform: "true"
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: platform
+  source:
+    repoURL: https://kafbat.github.io/helm-charts
+    chart: kafka-ui
+    targetRevision: 1.6.4
+    helm:
+      releaseName: kafka-ui
+      values: |
+        replicaCount: 1
+        envs:
+          config:
+            KAFKA_CLUSTERS_0_NAME: npd-kafka
+            KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: npd-kafka-kafka-bootstrap.kafka.svc.cluster.local:9093
+            KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SASL_SSL
+            KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM: SCRAM-SHA-512
+            KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION: /etc/kafka/certs/ca.p12
+            KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_TYPE: PKCS12
+            AUTH_TYPE: DISABLED
+          secretMappings:
+            KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG:
+              name: kafka-ui
+              keyName: sasl.jaas.config
+            KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_PASSWORD:
+              name: npd-kafka-cluster-ca-cert
+              keyName: ca.password
+        volumeMounts:
+          - name: cluster-ca
+            mountPath: /etc/kafka/certs
+            readOnly: true
+        volumes:
+          - name: cluster-ca
+            secret:
+              secretName: npd-kafka-cluster-ca-cert
+        service:
+          type: ClusterIP
+          port: 80
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kafka
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: false
+      selfHeal: true

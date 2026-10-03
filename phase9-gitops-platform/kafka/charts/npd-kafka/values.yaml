@@ -3,6 +3,8 @@ nameOverride: npd-kafka
 fullname: kafka
 
 clusterName: npd-kafka
+# Khôi phục cluster KRaft từ PVC cũ: true → patch status.clusterId → false (xem K8S-DEPLOY-GUIDE).
+pauseReconciliation: false
 kafkaVersion: "3.9.0"
 metadataVersion: "3.9-IV0"
 

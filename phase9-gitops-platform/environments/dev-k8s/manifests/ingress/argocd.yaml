@@ -1,0 +1,21 @@
+# ArgoCD UI — argocd-server phải chạy --insecure (TLS kết thúc ở f5-lb)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    haproxy.org/ssl-redirect: "false"
+spec:
+  ingressClassName: haproxy
+  rules:
+    - host: argocd-npd.co
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80

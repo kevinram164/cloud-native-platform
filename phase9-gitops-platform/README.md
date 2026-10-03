@@ -1,77 +1,41 @@
-# Phase 9 — GitOps Platform (Quick Start — OpenShift `dev-ocp`)
+# Phase 9 — GitOps Platform (`dev-k8s`)
 
-Triển khai **CI (Jenkins + Kaniko + Harbor)** và **CD (ArgoCD App of Apps)** cho banking-demo Phase 8 trên **OpenShift**.
+Platform CI/CD và infra dùng chung trên cụm kubeadm NPD (Cilium, HAProxy ingress, NFS CSI).
 
-**Hướng dẫn đầy đủ:** **[OCP-DEPLOY-GUIDE.md](./OCP-DEPLOY-GUIDE.md)**
+**Hướng dẫn đầy đủ:** **[K8S-DEPLOY-GUIDE.md](./K8S-DEPLOY-GUIDE.md)**
 
-Chi tiết kiến trúc: [PHASE9.md](./PHASE9.md) | [OCP-ARCHITECTURE.md](./OCP-ARCHITECTURE.md)
+## Thứ tự triển khai
 
-## Thứ tự triển khai (quan trọng)
+| Giai đoạn | Nội dung | Repo |
+|-----------|----------|------|
+| 0 | ArgoCD (Helm) | — |
+| 1 | Platform: NFS CSI, StorageClass, Vault + Agent Injector, Harbor, Jenkins, Ingress | cloud-native-platform |
+| 2 | Vault: init/unseal, seed, `vault-setup-k8s-auth.sh` | cloud-native-platform |
+| 3 | Infra: Postgres, Redis, RabbitMQ, Kong, Kafka | cloud-native-platform |
+| 4 | Observability: Coroot, OTEL Collector | cloud-native-platform |
+| 5 | CI: Jenkins → Harbor → bump tag trong repo app | app repo |
+| 6 | App: AppProject + app-of-apps của app | app repo (`banking-demo/deploy/dev-k8s`) |
 
-| Giai đoạn | Nội dung | Deploy app? |
-|-----------|----------|-------------|
-| 0 | NFS CSI + StorageClass `nfs-csi` | Không |
-| 1 | ArgoCD upstream + SCC + Route | Không |
-| 2 | Platform: Harbor, Vault, ESO, Jenkins + Routes | Không |
-| 2b | Observability: Coroot, OTEL, Linkerd (tùy chọn) | Không |
-| 3 | Infra: Postgres, Redis, RabbitMQ, Kong | Không |
-| 4 | CI/CD: Jenkins → Harbor → commit GitOps | Không |
-| 5 | ArgoCD sync banking app | **Có** |
-
-## Apply theo giai đoạn (`dev-ocp`)
-
-```bash
-export ARGOCD_NS=argocd
-
-# Giai đoạn 1 — sau ArgoCD bootstrap + appproject
-oc apply -f phase9-gitops-platform/environments/dev-ocp/appproject.yaml -n $ARGOCD_NS
-
-# Giai đoạn 2 — platform + routes
-oc apply -f phase9-gitops-platform/environments/dev-ocp/argocd/applications/platform-app-of-apps.yaml -n $ARGOCD_NS
-oc apply -f phase9-gitops-platform/environments/dev-ocp/argocd/applications/platform-routes-app-of-apps.yaml -n $ARGOCD_NS
-
-# Giai đoạn 2b — observability (tùy chọn)
-oc apply -f phase9-gitops-platform/environments/dev-ocp/argocd/applications/observability-app-of-apps.yaml -n $ARGOCD_NS
-
-# Giai đoạn 3 — infra
-oc apply -f phase9-gitops-platform/environments/dev-ocp/argocd/applications/infra-app-of-apps.yaml -n $ARGOCD_NS
-
-# Giai đoạn 4 — Jenkins pipeline green
-
-# Giai đoạn 5 — banking app (SAU CI/CD)
-oc apply -f phase9-gitops-platform/environments/dev-ocp/argocd/applications/banking-app-of-apps.yaml -n $ARGOCD_NS
-```
-
-## Luồng phát triển hàng ngày
-
-```bash
-git push origin dev-ocp   # phase8-application-v3/**
-# Jenkins: Kaniko → Harbor → commit values-images.yaml
-# ArgoCD: sync banking apps → rollout
-```
-
-## Cấu trúc ArgoCD
+## Cấu trúc ArgoCD (`environments/dev-k8s`)
 
 ```
-(platform + infra apply trước, banking apply sau CI/CD)
+AppProject platform
+platform-app-of-apps      → csi-driver-nfs, k8s-base, vault (+ injector), harbor, jenkins, platform-ingress
+infra-app-of-apps         → postgres, redis, rabbitmq, kong, strimzi-operator, kafka, kafka-ui
+observability-app-of-apps → coroot-operator, coroot-ce, opentelemetry-collector
 
-platform-app-of-apps      → harbor, vault, external-secrets, jenkins
-platform-routes           → OpenShift Routes (Harbor, Jenkins, Vault, banking)
-observability-app-of-apps → coroot, otel-collector, linkerd
-infra-app-of-apps         → postgres, redis, rabbitmq, kong
-banking-app-of-apps       → namespace, services Phase 8 (ingress Helm tắt — Route thay thế)
+AppProject banking (repo banking-demo)
+banking-root-dev-k8s      → namespace, auth/account/transfer/notification/api-producer, shop-bridge, frontend, ingress
 ```
 
-Per-service banking apps dùng:
+## Secret
 
-- `phase2-helm-chart/banking-demo` + `values-phase8.yaml`
-- `phase9-gitops-platform/gitops/values-images.yaml` (CI cập nhật tag)
-- `phase9-gitops-platform/gitops/values-observability.yaml` (OTEL + Linkerd)
+Vault Agent Injector thay cho External Secrets Operator. Pod có annotation `vault.hashicorp.com/agent-inject` được thêm init container login bằng ServiceAccount và ghi secret vào `/vault/secrets/`. Role/policy: `environments/dev-k8s/scripts/vault-setup-k8s-auth.sh`.
 
-## Tài liệu môi trường
+## Thư mục khác
 
-| Tài liệu | Mục đích |
-|----------|----------|
-| [environments/dev-ocp/](./environments/dev-ocp/) | Manifest ArgoCD + URL cluster |
-| [INSTALL-NFS-CSI.md](./environments/dev-ocp/INSTALL-NFS-CSI.md) | Storage NFS |
-| [INSTALL-ARGOCD-UPSTREAM.md](./environments/dev-ocp/INSTALL-ARGOCD-UPSTREAM.md) | Cài ArgoCD + SCC |
+| Thư mục | Ghi chú |
+|---------|---------|
+| `harbor/`, `vault/`, `jenkins/`, `observability/`, `kafka/` | Tài liệu và values từng thành phần |
+| `platform/keycloak`, `logging/`, `monitoring/` | Chưa bật trên dev-k8s |
+| `environments/dev-ocp`, `gitops-platform/`, `OCP-*.md` | OpenShift cũ (cụm đã gỡ), chỉ tham khảo |

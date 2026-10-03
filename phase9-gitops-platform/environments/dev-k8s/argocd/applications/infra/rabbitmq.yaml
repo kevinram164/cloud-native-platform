@@ -1,0 +1,33 @@
+# RabbitMQ standalone, ns rabbit
+# Admin user/password: Vault secret/rabbitmq/admin → Vault Agent Injector (role rabbitmq, SA rabbitmq)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-rabbitmq
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: rabbitmq
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kevinram164/cloud-native-platform.git
+    targetRevision: main
+    path: phase9-gitops-platform/environments/dev-k8s/manifests/rabbitmq
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rabbit
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

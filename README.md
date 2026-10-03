@@ -1,12 +1,15 @@
 # cloud-native-platform
 
-GitOps platform cho cụm NPD: Argo CD, Harbor, Jenkins, Vault, External Secrets, NFS CSI, Postgres, Redis, RabbitMQ, Kong, Kafka, Keycloak, observability, logging, Istio ambient.
+GitOps platform cho cụm NPD (kubeadm + Cilium): Argo CD, Harbor, Jenkins, Vault (Agent Injector), NFS CSI, observability (Coroot + OTEL), và infra dùng chung (Postgres, Redis, RabbitMQ, Kong, Kafka). Keycloak, logging, monitoring sẽ bật sau.
 
-Mã nguồn ứng dụng nằm ở repo riêng. Repo này chỉ giữ desired state của nền tảng và Application ArgoCD.
+Repo này chỉ giữ desired state của nền tảng. Ứng dụng (chart, values image, Application ArgoCD) nằm ở repo của từng app.
+
+- Không dùng service mesh (Istio, Linkerd): Cilium lo CNI và network policy.
+- Không dùng External Secrets Operator: workload nhận secret trực tiếp từ Vault qua Vault Agent Injector.
 
 | Repo | Giữ lại |
 |------|---------|
-| [banking-demo](https://github.com/kevinram164/banking-demo) | Chart và source banking (`phase2-helm-chart`, `phase5`, `phase8`) |
+| [banking-demo](https://github.com/kevinram164/banking-demo) | Source, chart, `deploy/dev-k8s` (AppProject `banking`, Application, values image) |
 | [movie-web](https://github.com/kevinram164/movie-web) | App CineHome, `deploy/argocd` |
 | [npd-shop](https://github.com/kevinram164/npd-shop) | App shop |
 | [jenkins-shared-library](https://github.com/kevinram164/jenkins-shared-library) | Shared library Jenkins load lúc chạy |
@@ -14,20 +17,20 @@ Mã nguồn ứng dụng nằm ở repo riêng. Repo này chỉ giữ desired st
 
 ## Bắt đầu
 
-Hướng dẫn triển khai: [phase9-gitops-platform/OCP-DEPLOY-GUIDE.md](phase9-gitops-platform/OCP-DEPLOY-GUIDE.md).
+Hướng dẫn triển khai: [phase9-gitops-platform/K8S-DEPLOY-GUIDE.md](phase9-gitops-platform/K8S-DEPLOY-GUIDE.md).
 
 ```bash
 # từ root repo này
-oc apply -f phase9-gitops-platform/environments/dev-ocp/appproject.yaml -n argocd
-oc apply -f phase9-gitops-platform/environments/dev-ocp/argocd/applications/platform-app-of-apps.yaml -n argocd
+bash phase9-gitops-platform/environments/dev-k8s/apply-argocd.sh                      # platform
+STAGE=infra bash phase9-gitops-platform/environments/dev-k8s/apply-argocd.sh          # infra
+STAGE=observability bash phase9-gitops-platform/environments/dev-k8s/apply-argocd.sh  # observability
 ```
 
-AppProject `banking-platform` được phép đọc cả repo này và `banking-demo`. Chart banking vẫn ở `banking-demo` nhánh `dev-ocp`. Values image (`phase9-gitops-platform/gitops/values-images.yaml`) ở nhánh `main` của repo này. Jenkins clone repo này khi bump tag.
-
-CineHome AppProject: `phase9-gitops-platform/environments/dev-ocp/appproject-cinehome.yaml`. Manifest app vẫn ở `movie-web`.
+`environments/dev-ocp`, `gitops-platform/` và `OCP-*.md` là bản OpenShift cũ (cụm đã gỡ), chỉ giữ để tham khảo. Phần banking, ESO, Istio, Linkerd đã bị xóa khỏi bản này nên nó không còn deploy được.
 
 ## Không đưa vào repo này
 
+- Ứng dụng và values image của ứng dụng.
 - `k8s-lab` — bài lab GitLab/Kubernetes, không phải platform đang chạy.
 - `F5-LB` — binary NGINX Plus và key, không commit.
 - `Open-Source-AIOps-Platform` — ứng dụng AIOps.

@@ -1,0 +1,34 @@
+# Postgres HA (Bitnami), ns postgres — dùng chung cho các app (banking, kong, ...)
+# Values: environments/dev-k8s/values/values-postgres-ha.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-postgres
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: postgresql
+      targetRevision: 15.5.32
+      helm:
+        releaseName: postgres-ha
+        valueFiles:
+          - $values/phase9-gitops-platform/environments/dev-k8s/values/values-postgres-ha.yaml
+    - repoURL: https://github.com/kevinram164/cloud-native-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: postgres
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: false
+      selfHeal: true

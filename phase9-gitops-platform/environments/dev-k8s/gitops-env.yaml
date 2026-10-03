@@ -1,0 +1,38 @@
+# Biến môi trường dev-k8s (không commit secret)
+platform:
+  repoUrl: https://github.com/kevinram164/cloud-native-platform.git
+  branch: main
+
+harbor:
+  host: harbor-npd.co
+
+jenkins:
+  namespace: platform
+  kanikoImage: gcr.io/kaniko-project/executor:v1.23.2
+
+vault:
+  addr: http://vault.vault.svc.cluster.local:8200
+  injector: true            # Vault Agent Injector — không dùng ESO
+  kvMount: secret           # KV v2
+
+cluster:
+  name: npd-k8s
+  cni: cilium
+  ingressClass: haproxy
+  storageClass: nfs-csi
+  nodes:
+    master: 10.100.1.110
+    workers: [10.100.1.121, 10.100.1.122, 10.100.1.123, 10.100.1.124]
+    ingress: 10.100.1.46        # npd-route — HAProxy ingress hostNetwork
+  loadBalancer: 10.100.1.100    # f5-lb NGINX Plus → npd-route:80/443
+  nfs:
+    server: 10.100.1.180
+    share: /shares/registry
+
+domains:
+  argocd: argocd-npd.co
+  harbor: harbor-npd.co
+  jenkins: jenkins-npd.co
+  vault: vault-npd.co
+  coroot: coroot-npd.co
+  kafkaUi: kafka-ui-npd.co

@@ -1,0 +1,14 @@
+# PVC test nfs-csi — không nằm trong Application nào
+# kubectl create ns nfs-test && kubectl apply -f test-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-nfs
+  namespace: nfs-test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-csi
+  resources:
+    requests:
+      storage: 1Gi

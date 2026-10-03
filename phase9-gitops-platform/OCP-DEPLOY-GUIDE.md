@@ -1,5 +1,7 @@
 # Phase 9 — Triển khai GitOps trên OpenShift (nhánh `dev-ocp`)
 
+> **Legacy.** Cụm `ocp01` đã gỡ. Banking (chuyển sang `banking-demo/deploy`), External Secrets, Istio và Linkerd đã bị xóa khỏi repo, nên hướng dẫn này không còn chạy được nguyên vẹn. Cụm hiện tại: [K8S-DEPLOY-GUIDE.md](./K8S-DEPLOY-GUIDE.md).
+
 Hướng dẫn **end-to-end** cho **OpenShift Container Platform (OCP)** đã có sẵn — nhánh Git **`dev-ocp`**.
 
 - **CI:** Jenkins + Kaniko → Harbor (in-cluster)
