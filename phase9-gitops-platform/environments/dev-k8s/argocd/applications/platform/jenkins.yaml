@@ -64,6 +64,9 @@ spec:
             - pipeline-groovy-lib:798.v5cc688825312
             - durable-task:686.v80ff80875b_82
             - pipeline-utility-steps:2.19.0
+            # config.xml cũ (jenkins_home trên NFS) có OicSecurityRealm → thiếu plugin là Jenkins không boot.
+            # JCasC securityRealm local ghi đè sau khi load; giữ cho lúc bật Keycloak.
+            - oic-auth:4.690.v5821cf665e43
           additionalPlugins: []
           overwritePlugins: true
           # false → chart bỏ mount emptyDir /usr/share/jenkins/ref/plugins ở init container,
