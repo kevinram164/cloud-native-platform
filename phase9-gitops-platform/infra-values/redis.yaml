@@ -1,0 +1,87 @@
+# Redis — khớp OCP hiện tại (shared banking + CineHome)
+# Chart: bitnami/redis 20.6.2 | release: redis-ha | Sentinel HA 3 node
+# Secret cluster: redis-ha / key redis-password  (KHÔNG đổi tên — banking đang dùng)
+#
+# OCP + NFS: UID 1001 + SCC redis-uid1001 (cùng mô hình MinIO / Postgres)
+architecture: replication
+
+auth:
+  enabled: true
+  existingSecret: redis-ha
+  existingSecretPasswordKey: redis-password
+
+serviceAccount:
+  create: true
+  name: redis-ha
+
+volumePermissions:
+  enabled: false
+
+sentinel:
+  enabled: true
+  quorum: 2
+
+master:
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1001
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+  persistence:
+    enabled: true
+    storageClass: nfs-csi
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 150m
+      memory: 192Mi
+
+replica:
+  replicaCount: 3
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1001
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+  persistence:
+    enabled: true
+    storageClass: nfs-csi
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 150m
+      memory: 192Mi
+
+metrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 64Mi

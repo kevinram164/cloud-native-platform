@@ -1,0 +1,15 @@
+# Linkerd control-plane — OpenShift (nftables)
+# Cần identity bootstrap (cert) trước khi sync — xem scripts/generate-linkerd-certs.sh
+
+identity:
+  externalCA: true
+  issuer:
+    scheme: kubernetes.io/tls
+
+proxyInit:
+  iptablesMode: nft
+  runAsRoot: true
+
+cniEnabled: false
+
+controllerReplicas: 1

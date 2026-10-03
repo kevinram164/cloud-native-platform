@@ -1,0 +1,20 @@
+# Biến môi trường GitOps — dev-ocp (OpenShift)
+gitops:
+  repoUrl: https://github.com/kevinram164/cloud-native-platform.git
+  branch: main
+  valuesImagesPath: phase9-gitops-platform/gitops/values-images.yaml
+  appRepoUrl: https://github.com/kevinram164/banking-demo.git
+  appBranch: dev-ocp
+
+harbor:
+  host: harbor-platform.apps.ocp01.npd.co
+  project: banking-demo
+
+jenkins:
+  namespace: platform
+  kanikoImage: gcr.io/kaniko-project/executor:v1.23.2
+
+ci:
+  watchPaths:
+    - phase8-application-v3/**
+    - phase9-gitops-platform/gitops/values-images.yaml

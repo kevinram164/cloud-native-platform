@@ -1,0 +1,26 @@
+# CineHome — App of Apps wrapper (generic path)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cinehome-app-of-apps
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: cinehome
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: cinehome-platform
+  source:
+    repoURL: https://github.com/kevinram164/movie-web.git
+    targetRevision: main
+    path: deploy/argocd
+    directory:
+      recurse: false
+      exclude: "app-of-apps.yaml"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true

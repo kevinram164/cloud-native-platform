@@ -1,0 +1,15 @@
+# Coroot CE — values OpenShift (nfs-csi)
+# Cluster đã có Coroot Healthy thì không sync đè trừ khi cố ý.
+
+clickhouse:
+  persistence:
+    enabled: true
+    storageClass: nfs-csi
+    size: 20Gi
+
+coroot:
+  replicas: 1
+
+# OCP: node-agent eBPF thường cần SCC — bật khi đã harden
+nodeAgent:
+  enabled: false

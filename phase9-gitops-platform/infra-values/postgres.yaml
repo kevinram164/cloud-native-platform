@@ -1,0 +1,98 @@
+# Postgres — khớp OCP hiện tại (shared banking + CineHome)
+# Chart: bitnami/postgresql 15.5.32 | release: postgres-ha
+# architecture: replication | primary-0 + read-0 | PVC 1Gi nfs-csi
+# Chart auth user/db = banking (KHÔNG đổi — banking đang chạy)
+# Secret cluster: postgres-ha-postgresql
+#   keys: password, postgres-password, replication-password
+# CineHome: Job movie-db-init tạo thêm ROLE/DB `movie` trên cùng instance
+#
+# OCP + NFS: cố định UID 1001 (SCC postgres-uid1001) — không dùng restricted-v2.
+# NFS data phải chown 1001:1001 (fsGroup trên NFS không đáng tin).
+architecture: replication
+
+auth:
+  username: banking
+  database: banking
+  existingSecret: postgres-ha-postgresql
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+    replicationPasswordKey: replication-password
+
+replication:
+  synchronousCommit: "off"
+  numSynchronousReplicas: 0
+  applicationName: my_application
+
+serviceAccount:
+  create: true
+  name: postgres-ha-postgresql
+
+# Init container root chmod — fail trên OCP restricted; UID 1001 đã khớp NFS thì không cần
+volumePermissions:
+  enabled: false
+
+primary:
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1001
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+  persistence:
+    enabled: true
+    storageClass: nfs-csi
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+readReplicas:
+  replicaCount: 1
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1001
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroupChangePolicy: OnRootMismatch
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: RuntimeDefault
+  persistence:
+    enabled: true
+    storageClass: nfs-csi
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+metrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 64Mi

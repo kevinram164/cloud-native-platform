@@ -1,0 +1,14 @@
+# Placeholder — tạo cert trước khi sync Linkerd identity
+# Chạy: bash phase9-gitops-platform/observability/scripts/generate-linkerd-certs.sh
+# Output đưa vào thư mục này (hoặc disable Application linkerd-identity-bootstrap nếu Linkerd đã có sẵn).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linkerd-identity-ocp-readme
+  namespace: linkerd
+  annotations:
+    cinehome.io/note: "Replace with real identity issuer manifests after generate-linkerd-certs.sh"
+data:
+  README: |
+    Generate trust anchor + issuer, then replace this kustomization with real Secrets/ConfigMaps.
+    If Linkerd already runs on the cluster, do not sync this Application.
