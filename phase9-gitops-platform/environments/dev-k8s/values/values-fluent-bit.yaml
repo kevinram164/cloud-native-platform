@@ -151,7 +151,7 @@ config:
         Generate_ID        On
         Write_Operation    index
         Retry_Limit        5
-        Trace_Error        Off
+        Trace_Error        On
 
     [OUTPUT]
         Name               es
@@ -170,7 +170,7 @@ config:
         Generate_ID        On
         Write_Operation    index
         Retry_Limit        5
-        Trace_Error        Off
+        Trace_Error        On
 
     [OUTPUT]
         Name               es
@@ -189,7 +189,7 @@ config:
         Generate_ID        On
         Write_Operation    index
         Retry_Limit        5
-        Trace_Error        Off
+        Trace_Error        On
 
     [OUTPUT]
         Name               es
@@ -208,7 +208,7 @@ config:
         Generate_ID        On
         Write_Operation    index
         Retry_Limit        5
-        Trace_Error        Off
+        Trace_Error        On
 
 hotReload:
   enabled: false

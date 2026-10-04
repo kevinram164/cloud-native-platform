@@ -72,6 +72,9 @@ data:
                     "number_of_replicas": 0,
                     "index.lifecycle.name": "logs-retention-7d",
                     "index.mapping.total_fields.limit": 2000,
+                    # Log JSON nhiều app (Merge_Log): field sai kiểu / vượt limit → bỏ field, không reject document
+                    "index.mapping.ignore_malformed": True,
+                    "index.mapping.total_fields.ignore_dynamic_beyond_limit": True,
                 },
                 "mappings": {"properties": {
                     "@timestamp": {"type": "date"},
