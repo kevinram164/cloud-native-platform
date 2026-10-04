@@ -22,9 +22,13 @@ auth:
   # Secret random + checksum đổi mỗi lần render → pod restart liên tục). Secret này không cần tồn tại.
   existingSecret: minio-vault-managed
 
+# Vault Agent login bằng SA token → chart Bitnami mặc định tắt mount token (lỗi "failed to find service account volume mount")
+automountServiceAccountToken: true
+
 serviceAccount:
   create: true
   name: minio
+  automountServiceAccountToken: true
 
 podAnnotations:
   vault.hashicorp.com/agent-inject: "true"
