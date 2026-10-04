@@ -63,7 +63,7 @@ data:
         print("ILM logs-retention-7d OK")
 
         # priority 500 > template built-in logs-*-* (100, data stream) → logs-bank-YYYY.MM.DD là index thường
-        call("PUT", "/_index_template/npd-logs", {
+        npd_logs_template = {
             "index_patterns": [p + "-*" for p in LOG_PREFIXES],
             "priority": 500,
             "template": {
@@ -82,14 +82,23 @@ data:
                     "message": {"type": "text"},
                 }},
             },
-        })
+        }
+        # Data stream lỡ tạo trước khi có template (Fluent Bit ghi trước es-setup) phải xoá trước:
+        # ES từ chối template không-data-stream nếu còn data stream khớp pattern. Fluent Bit có thể
+        # tạo lại ngay giữa hai lệnh → lặp.
+        for attempt in range(5):
+            _, ds = call("GET", "/_data_stream/" + ",".join(p + "-*" for p in LOG_PREFIXES), ok=(200, 404))
+            for d in ds.get("data_streams", []):
+                call("DELETE", "/_data_stream/" + d["name"], ok=(200, 404))
+                print("xoá data stream", d["name"])
+            status, body = call("PUT", "/_index_template/npd-logs", npd_logs_template, ok=(200, 400))
+            if status == 200:
+                break
+            print("template npd-logs bị từ chối, thử lại:", json.dumps(body)[:300])
+            time.sleep(1)
+        else:
+            sys.exit("không tạo được index template npd-logs")
         print("index template npd-logs OK")
-
-        # Data stream lỡ tạo trước khi có template (Fluent Bit ghi trước es-setup) → xoá để tạo lại đúng
-        _, ds = call("GET", "/_data_stream/" + ",".join(p + "-*" for p in LOG_PREFIXES), ok=(200, 404))
-        for d in ds.get("data_streams", []):
-            call("DELETE", "/_data_stream/" + d["name"])
-            print("xoá data stream", d["name"])
 
         # Data stream APM: replicas 0 qua component template @custom
         _, tpls = call("GET", "/_index_template")
