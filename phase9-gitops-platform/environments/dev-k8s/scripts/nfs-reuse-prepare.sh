@@ -8,7 +8,7 @@
 #   bash nfs-reuse-prepare.sh                     # chỉ kiểm tra (mặc định)
 #   bash nfs-reuse-prepare.sh --backup /backup    # tar các folder nhỏ quan trọng (vault, DB)
 #   bash nfs-reuse-prepare.sh --apply             # chown theo bảng
-#   bash nfs-reuse-prepare.sh --apply --fresh-observability   # dời observability/* sang _old, Coroot chạy sạch
+#   bash nfs-reuse-prepare.sh --apply --fresh-observability   # dời observability/*, logging/* (Coroot, OpenSearch cũ) sang _old
 set -euo pipefail
 
 SHARE="${NFS_SHARE:-/shares/registry}"
@@ -41,6 +41,7 @@ postgres/data-postgres-ha-postgresql-*     1001:1001    yes     DB banking + kon
 redis/redis-data-redis-ha-node-*           1001:1001    no      Redis HA
 rabbit/rabbitmq-data                       999:999      no      RabbitMQ (user/vhost/queue cũ giữ nguyên)
 kafka/data-0-npd-kafka-dual-role-*         1001:1001    no      Kafka KRaft — cần patch clusterId
+minio/minio                                1001:1001    no      MinIO dùng chung — giữ root user/password cũ (IAM mã hoá bằng root cred)
 EOF
 )
 
@@ -90,15 +91,17 @@ grep -h '^cluster.id=' "${SHARE}"/kafka/data-0-npd-kafka-dual-role-*/kafka-log*/
   || echo "Không thấy meta.properties — Kafka sẽ chạy cluster mới, đặt pauseReconciliation: false"
 echo
 
-if [[ -d "${SHARE}/observability" ]]; then
-  echo "=== observability (Coroot: metrics/log/trace cũ, không cần giữ)"
-  du -sh "${SHARE}"/observability/* 2>/dev/null || true
+# Coroot (observability/) và OpenSearch (logging/) cũ không dùng lại: ES/Prometheus mới tạo PVC trống
+for ns in observability logging; do
+  [[ -d "${SHARE}/${ns}" ]] || continue
+  echo "=== ${ns} (telemetry cũ, không cần giữ)"
+  du -sh "${SHARE}/${ns}"/* 2>/dev/null || true
   if ${APPLY} && ${FRESH_OBS}; then
-    mv "${SHARE}/observability" "${SHARE}/observability_old_$(date +%Y%m%d)"
-    echo "    đã dời sang observability_old_* — Coroot tạo PVC mới"
+    mv "${SHARE}/${ns}" "${SHARE}/${ns}_old_$(date +%Y%m%d)"
+    echo "    đã dời sang ${ns}_old_*"
   fi
   echo
-fi
+done
 
 echo "=== Export NFS (kubelet đổi fsGroup cần no_root_squash)"
 exportfs -v 2>/dev/null | grep -A1 "${SHARE}" || echo "Không đọc được exportfs"

@@ -1,20 +1,21 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: coroot
+  name: kibana
   namespace: observability
   annotations:
     haproxy.org/ssl-redirect: "false"
+    haproxy.org/timeout-server: "300s"
 spec:
   ingressClassName: haproxy
   rules:
-    - host: npd-coroot.co
+    - host: npd-kibana.co
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: coroot-coroot
+                name: kb-kb-http
                 port:
-                  number: 8080
+                  number: 5601

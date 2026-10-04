@@ -1,0 +1,279 @@
+# kube-prometheus-stack — dev-k8s (ns monitoring)
+#   Grafana      https://npd-grafana.co      (SSO Keycloak, group platform-admin → Admin)
+#   Prometheus   https://npd-prometheus.co   (không auth — chỉ dùng nội bộ)
+#   Alertmanager https://npd-alertmanager.co (không auth) → Telegram
+# Secret qua Vault Agent Injector (không tạo Secret K8s):
+#   grafana      ← secret/platform/grafana {admin_password}, platform/keycloak-clients {grafana},
+#                  platform/elastic {grafana_password}
+#   alertmanager ← secret/platform/alertmanager-telegram {bot_token}
+# ServiceMonitor/PodMonitor/PrometheusRule/dashboard: manifests/monitoring (app observability-monitoring-config).
+
+fullnameOverride: kube-prometheus-stack
+
+# kubeadm: etcd / scheduler / controller-manager / kube-proxy bind 127.0.0.1 → không scrape được từ pod.
+# Muốn bật: sửa bind-address trong /etc/kubernetes/manifests/*.yaml trên master (xem K8S-DEPLOY-GUIDE).
+kubeEtcd:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+defaultRules:
+  rules:
+    etcd: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeControllerManager: false
+    kubeProxy: false
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+prometheus:
+  prometheusSpec:
+    externalUrl: https://npd-prometheus.co
+    retention: 7d
+    retentionSize: 18GB
+    # Nhận mọi ServiceMonitor/PodMonitor/PrometheusRule/Probe trong cluster (không cần label release)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    enableRemoteWriteReceiver: true
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 3Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: nfs-csi
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 20Gi
+
+alertmanager:
+  alertmanagerSpec:
+    externalUrl: https://npd-alertmanager.co
+    retention: 120h
+    podMetadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-init-first: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: "alertmanager"
+        vault.hashicorp.com/agent-inject-secret-telegram-bot-token: "secret/data/platform/alertmanager-telegram"
+        vault.hashicorp.com/agent-inject-template-telegram-bot-token: |-
+          {{- with secret "secret/data/platform/alertmanager-telegram" -}}
+          {{- .Data.data.bot_token -}}
+          {{- end -}}
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: nfs-csi
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 1Gi
+
+  config:
+    global:
+      resolve_timeout: 5m
+    templates:
+      - /etc/alertmanager/config/*.tmpl
+    route:
+      receiver: telegram
+      group_by: [namespace, alertname]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+        - receiver: "null"
+          matchers: ['severity =~ "none|info"']
+        # Ứng dụng: báo nhanh, nhắc lại 30 phút
+        - receiver: telegram
+          matchers: ['team =~ "banking|shop|movie"']
+          group_by: [alertname]
+          group_wait: 10s
+          group_interval: 1m
+          repeat_interval: 30m
+    inhibit_rules:
+      - source_matchers: ['severity = "critical"']
+        target_matchers: ['severity =~ "warning|info"']
+        equal: [namespace, alertname]
+      - source_matchers: ['severity = "warning"']
+        target_matchers: ['severity = "info"']
+        equal: [namespace, alertname]
+      - source_matchers: ['alertname = "InfoInhibitor"']
+        target_matchers: ['severity = "info"']
+        equal: [namespace]
+    receivers:
+      - name: "null"
+      - name: telegram
+        telegram_configs:
+          - bot_token_file: /vault/secrets/telegram-bot-token
+            chat_id: -1004489182185
+            parse_mode: HTML
+            send_resolved: true
+            message: '{{ template "npd.telegram.message" . }}'
+
+  templateFiles:
+    telegram.tmpl: |-
+      {{ define "npd.telegram.message" -}}
+      <b>[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}]</b> {{ .CommonLabels.alertname | html }}
+      {{- with .CommonLabels.severity }} [{{ . }}]{{ end }}
+      {{- with .CommonLabels.namespace }}
+      ns: <code>{{ . }}</code>{{ end }}
+      {{ range .Alerts -}}
+      - {{ or .Annotations.summary .Annotations.description .Annotations.message | html }}
+      {{- with .Labels.pod }} (pod <code>{{ . }}</code>){{ end }}
+      {{ end -}}
+      <a href="{{ .ExternalURL }}">Alertmanager</a>
+      {{- end }}
+
+grafana:
+  enabled: true
+  defaultDashboardsTimezone: Asia/Ho_Chi_Minh
+  testFramework:
+    enabled: false
+
+  serviceAccount:
+    create: true
+    name: kube-prometheus-stack-grafana
+
+  podAnnotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-init-first: "true"
+    vault.hashicorp.com/agent-pre-populate-only: "true"
+    vault.hashicorp.com/role: "grafana"
+    vault.hashicorp.com/agent-inject-secret-admin-password: "secret/data/platform/grafana"
+    vault.hashicorp.com/agent-inject-template-admin-password: |-
+      {{- with secret "secret/data/platform/grafana" -}}
+      {{- .Data.data.admin_password -}}
+      {{- end -}}
+    vault.hashicorp.com/agent-inject-secret-oidc-client-secret: "secret/data/platform/keycloak-clients"
+    vault.hashicorp.com/agent-inject-template-oidc-client-secret: |-
+      {{- with secret "secret/data/platform/keycloak-clients" -}}
+      {{- .Data.data.grafana -}}
+      {{- end -}}
+    vault.hashicorp.com/agent-inject-secret-es-password: "secret/data/platform/elastic"
+    vault.hashicorp.com/agent-inject-template-es-password: |-
+      {{- with secret "secret/data/platform/elastic" -}}
+      {{- .Data.data.grafana_password -}}
+      {{- end -}}
+
+  # *_FILE → chart không tạo Secret admin, không gắn env từ Secret
+  env:
+    GF_SECURITY_ADMIN_USER: admin
+    GF_SECURITY_ADMIN_PASSWORD__FILE: /vault/secrets/admin-password
+
+  grafana.ini:
+    server:
+      root_url: https://npd-grafana.co
+    users:
+      auto_assign_org_role: Viewer
+    auth:
+      oauth_auto_login: false
+      signout_redirect_url: https://npd-keycloak.co/realms/platform/protocol/openid-connect/logout?post_logout_redirect_uri=https%3A%2F%2Fnpd-grafana.co%2Flogin&client_id=grafana
+    auth.generic_oauth:
+      enabled: true
+      name: Keycloak
+      allow_sign_up: true
+      client_id: grafana
+      client_secret: $__file{/vault/secrets/oidc-client-secret}
+      scopes: openid profile email
+      auth_url: https://npd-keycloak.co/realms/platform/protocol/openid-connect/auth
+      token_url: https://npd-keycloak.co/realms/platform/protocol/openid-connect/token
+      api_url: https://npd-keycloak.co/realms/platform/protocol/openid-connect/userinfo
+      login_attribute_path: preferred_username
+      name_attribute_path: name
+      email_attribute_path: email
+      groups_attribute_path: groups
+      role_attribute_path: "contains(groups[*], 'platform-admin') && 'Admin' || 'Viewer'"
+      role_attribute_strict: false
+      use_refresh_token: true
+      tls_skip_verify_insecure: true
+
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: nfs-csi
+    size: 5Gi
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      # Sidecar không có user/pass admin (đọc từ file Vault) → không gọi API reload;
+      # Grafana tự quét lại thư mục dashboard định kỳ.
+      skipReload: true
+      provider:
+        foldersFromFilesStructure: true
+        allowUiUpdates: true
+    datasources:
+      enabled: true
+      skipReload: true
+      initDatasources: true
+
+  additionalDataSources:
+    - name: Elasticsearch Logs
+      uid: es-logs
+      type: elasticsearch
+      access: proxy
+      url: https://es-es-http.observability.svc.cluster.local:9200
+      basicAuth: true
+      basicAuthUser: grafana
+      jsonData:
+        index: "logs-*"
+        timeField: "@timestamp"
+        logMessageField: log
+        logLevelField: level
+        tlsSkipVerify: true
+      secureJsonData:
+        basicAuthPassword: $__file{/vault/secrets/es-password}
+    - name: APM Traces
+      uid: es-apm-traces
+      type: elasticsearch
+      access: proxy
+      url: https://es-es-http.observability.svc.cluster.local:9200
+      basicAuth: true
+      basicAuthUser: grafana
+      jsonData:
+        index: "traces-apm*"
+        timeField: "@timestamp"
+        tlsSkipVerify: true
+      secureJsonData:
+        basicAuthPassword: $__file{/vault/secrets/es-password}
+
+  ingress:
+    enabled: false

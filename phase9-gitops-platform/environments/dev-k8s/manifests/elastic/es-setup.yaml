@@ -1,0 +1,230 @@
+# es-setup (idempotent): ILM logs-retention-7d, index template logs-bank/shop/movie/infra (replicas 0),
+# replicas 0 cho data stream APM (1 node → green), role grafana_reader + user grafana (Grafana datasource).
+# Chạy mỗi lần sync (hook Sync, wave 1 — sau CR wave 0) và hằng ngày 03:00 (CronJob).
+# Mật khẩu: elastic từ Secret ECK es-es-elastic-user; grafana từ Vault secret/platform/elastic (grafana_password).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: es-setup
+  namespace: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: es-setup
+  namespace: observability
+data:
+  es_setup.py: |
+    import base64, json, os, ssl, sys, time, urllib.error, urllib.request
+
+    ES = os.environ.get("ES_URL", "https://es-es-http:9200").rstrip("/")
+    AUTH = "Basic " + base64.b64encode(f"elastic:{os.environ['ELASTIC_PASSWORD']}".encode()).decode()
+    CTX = ssl.create_default_context()
+    CTX.check_hostname = False
+    CTX.verify_mode = ssl.CERT_NONE
+    LOG_PREFIXES = ["logs-bank", "logs-shop", "logs-movie", "logs-infra"]
+    APM_PREFIXES = ("traces-apm", "logs-apm", "metrics-apm")
+
+
+    def call(method, path, body=None, ok=(200,)):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(ES + path, data=data, method=method)
+        req.add_header("Authorization", AUTH)
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, context=CTX, timeout=30) as r:
+                return r.status, json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            if e.code in ok:
+                return e.code, json.loads(e.read() or b"{}")
+            raise RuntimeError(f"{method} {path} -> {e.code}: {e.read()[:500]!r}")
+
+
+    def wait_es():
+        for _ in range(120):
+            try:
+                _, h = call("GET", "/_cluster/health")
+                if h.get("status") in ("green", "yellow"):
+                    print("ES health:", h["status"])
+                    return
+            except Exception as e:
+                print("chờ ES...", e)
+            time.sleep(5)
+        sys.exit("ES không sẵn sàng sau 10 phút")
+
+
+    def main():
+        wait_es()
+
+        call("PUT", "/_ilm/policy/logs-retention-7d", {"policy": {"phases": {
+            "hot": {"actions": {}},
+            "delete": {"min_age": "7d", "actions": {"delete": {}}},
+        }}})
+        print("ILM logs-retention-7d OK")
+
+        # priority 500 > template built-in logs-*-* (100, data stream) → logs-bank-YYYY.MM.DD là index thường
+        call("PUT", "/_index_template/npd-logs", {
+            "index_patterns": [p + "-*" for p in LOG_PREFIXES],
+            "priority": 500,
+            "template": {
+                "settings": {
+                    "number_of_shards": 1,
+                    "number_of_replicas": 0,
+                    "index.lifecycle.name": "logs-retention-7d",
+                    "index.mapping.total_fields.limit": 2000,
+                },
+                "mappings": {"properties": {
+                    "@timestamp": {"type": "date"},
+                    "log": {"type": "text"},
+                    "message": {"type": "text"},
+                }},
+            },
+        })
+        print("index template npd-logs OK")
+
+        # Data stream lỡ tạo trước khi có template (Fluent Bit ghi trước es-setup) → xoá để tạo lại đúng
+        _, ds = call("GET", "/_data_stream/" + ",".join(p + "-*" for p in LOG_PREFIXES), ok=(200, 404))
+        for d in ds.get("data_streams", []):
+            call("DELETE", "/_data_stream/" + d["name"])
+            print("xoá data stream", d["name"])
+
+        # Data stream APM: replicas 0 qua component template @custom
+        _, tpls = call("GET", "/_index_template")
+        customs = set()
+        for t in tpls.get("index_templates", []):
+            it = t["index_template"]
+            if any(p.startswith(APM_PREFIXES) for p in it.get("index_patterns", [])):
+                customs.update(c for c in it.get("composed_of", []) if c.endswith("@custom"))
+        for c in sorted(customs):
+            call("PUT", "/_component_template/" + c,
+                 {"template": {"settings": {"index": {"number_of_replicas": 0}}}})
+        print("APM @custom replicas 0:", len(customs))
+        call("PUT", "/traces-apm*,logs-apm*,metrics-apm*,logs-*/_settings?expand_wildcards=all&allow_no_indices=true",
+             {"index": {"number_of_replicas": 0}}, ok=(200, 404))
+
+        call("PUT", "/_security/role/grafana_reader", {
+            "cluster": ["monitor"],
+            "indices": [{
+                "names": ["logs-*", "traces-apm*", "metrics-apm*"],
+                "privileges": ["read", "view_index_metadata"],
+            }],
+        })
+        with open(os.environ.get("GRAFANA_PASSWORD_FILE", "/vault/secrets/grafana-password")) as f:
+            gpw = f.read().strip()
+        call("PUT", "/_security/user/grafana", {
+            "password": gpw,
+            "roles": ["grafana_reader"],
+            "full_name": "Grafana datasource",
+        })
+        print("role grafana_reader + user grafana OK")
+
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: es-setup
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: "elastic-setup"
+        vault.hashicorp.com/agent-inject-secret-grafana-password: "secret/data/platform/elastic"
+        vault.hashicorp.com/agent-inject-template-grafana-password: |
+          {{- with secret "secret/data/platform/elastic" -}}
+          {{ .Data.data.grafana_password }}
+          {{- end }}
+    spec:
+      serviceAccountName: es-setup
+      restartPolicy: OnFailure
+      containers:
+        - name: es-setup
+          image: docker.io/library/python:3.12-alpine
+          command: ["python", "-u", "/scripts/es_setup.py"]
+          env:
+            - name: ES_URL
+              value: https://es-es-http.observability.svc:9200
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: es-es-elastic-user
+                  key: elastic
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: scripts
+          configMap:
+            name: es-setup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: es-setup
+  namespace: observability
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          annotations:
+            vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/agent-pre-populate-only: "true"
+            vault.hashicorp.com/role: "elastic-setup"
+            vault.hashicorp.com/agent-inject-secret-grafana-password: "secret/data/platform/elastic"
+            vault.hashicorp.com/agent-inject-template-grafana-password: |
+              {{- with secret "secret/data/platform/elastic" -}}
+              {{ .Data.data.grafana_password }}
+              {{- end }}
+        spec:
+          serviceAccountName: es-setup
+          restartPolicy: OnFailure
+          containers:
+            - name: es-setup
+              image: docker.io/library/python:3.12-alpine
+              command: ["python", "-u", "/scripts/es_setup.py"]
+              env:
+                - name: ES_URL
+                  value: https://es-es-http.observability.svc:9200
+                - name: ELASTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: es-es-elastic-user
+                      key: elastic
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+          volumes:
+            - name: scripts
+              configMap:
+                name: es-setup

@@ -1,0 +1,53 @@
+# kube-prometheus-stack (Prometheus, Alertmanager → Telegram, Grafana), ns monitoring
+# Values: environments/dev-k8s/values/values-kube-prometheus-stack.yaml
+# Release/namespace giữ tên kube-prometheus-stack/monitoring (KEDA banking trỏ vào
+# kube-prometheus-stack-prometheus.monitoring:9090).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-kube-prometheus-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: 81.2.5
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/phase9-gitops-platform/environments/dev-k8s/values/values-kube-prometheus-stack.yaml
+    - repoURL: https://github.com/kevinram164/cloud-native-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      # CRD prometheus-operator vượt giới hạn annotation last-applied của client-side apply
+      - ServerSideApply=true
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle

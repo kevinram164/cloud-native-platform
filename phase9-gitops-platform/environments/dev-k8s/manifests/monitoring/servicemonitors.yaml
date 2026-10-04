@@ -1,0 +1,191 @@
+# ServiceMonitor/PodMonitor — tất cả đặt ở ns monitoring, chọn target qua namespaceSelector.
+# Lý do: ns app (npd-banking, npd-shop) có thể chưa tồn tại; nếu đặt CR trong ns đó, app ArgoCD
+# fail cả lượt sync. Label `namespace` của series vẫn là ns của target (dashboard/rule không đổi).
+#
+# App: Prometheus Operator gắn label target `endpoint`=<port>, đè label app `endpoint`=/api/...
+# → dashboard transfer chết. Fix: honorLabels + labeldrop endpoint.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: banking-services
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [npd-banking]
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [api-producer, auth-service, account-service, transfer-service, notification-service, shop-bridge]
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - action: labeldrop
+          regex: endpoint
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: npd-shop-services
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [npd-shop]
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values: [gateway, auth-service, catalog-service, order-service, payment-worker, shop-web]
+  endpoints:
+    - targetPort: 8080
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - action: labeldrop
+          regex: endpoint
+---
+# Bitnami postgresql/redis: Service *-metrics (component=metrics, port http-metrics)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [postgres]
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: metrics
+  endpoints:
+    - port: http-metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [redis]
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: metrics
+  endpoints:
+    - port: http-metrics
+      interval: 30s
+---
+# Kong: plugin prometheus (global, do kong-import-job repo banking bật) → Admin API :8001/metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kong-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [kong]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kong
+  endpoints:
+    - port: kong-admin
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq-metrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [rabbit]
+  selector:
+    matchLabels:
+      app: rabbitmq
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      honorLabels: true
+---
+# Strimzi: broker (JMX exporter, chart npd-kafka metricsConfig) + kafka-exporter đều expose port tcp-prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kafka-resources
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [kafka]
+  selector:
+    matchExpressions:
+      - key: strimzi.io/kind
+        operator: In
+        values: [Kafka]
+  podMetricsEndpoints:
+    - port: tcp-prometheus
+      path: /metrics
+      interval: 30s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_label_strimzi_io_name]
+          targetLabel: strimzi_io_name
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node_name
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: strimzi-cluster-operator
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [kafka]
+  selector:
+    matchLabels:
+      strimzi.io/kind: cluster-operator
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 60s
+---
+# MinIO: MINIO_PROMETHEUS_AUTH_TYPE=public (values-minio.yaml) → không cần bearer token
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [minio]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minio
+  endpoints:
+    - port: minio-api
+      path: /minio/v2/metrics/cluster
+      interval: 60s

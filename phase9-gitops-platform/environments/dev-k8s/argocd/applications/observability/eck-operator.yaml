@@ -1,0 +1,54 @@
+# ECK operator (CRD Elasticsearch/Kibana/ApmServer) — ns elastic-system, quản lý mọi namespace.
+# CR nằm ở app observability-elastic-stack (manifests/elastic).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-eck-operator
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: logging
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: platform
+  source:
+    repoURL: https://helm.elastic.co
+    chart: eck-operator
+    targetRevision: 3.5.0
+    helm:
+      releaseName: elastic-operator
+      valuesObject:
+        installCRDs: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 150Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        telemetry:
+          disabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: elastic-system
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      # CRD ECK rất lớn
+      - ServerSideApply=true
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
+  # Operator tự cấp cert cho webhook rồi patch caBundle
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle

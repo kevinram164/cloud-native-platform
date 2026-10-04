@@ -1,0 +1,32 @@
+# Kibana — HTTP thường (TLS kết thúc ở f5-lb), login user elastic (Basic license không có OIDC).
+# Index template APM (traces-apm*, ...) do plugin apm-data của Elasticsearch 8.15+ tự cài, không cần Fleet.
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: kb
+  namespace: observability
+spec:
+  version: 8.19.22
+  count: 1
+  elasticsearchRef:
+    name: es
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  config:
+    server.publicBaseUrl: https://npd-kibana.co
+  podTemplate:
+    spec:
+      containers:
+        - name: kibana
+          env:
+            - name: NODE_OPTIONS
+              value: "--max-old-space-size=1024"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 1536Mi

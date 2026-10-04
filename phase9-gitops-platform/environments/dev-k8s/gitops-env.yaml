@@ -34,6 +34,11 @@ domains:
   harbor: npd-harbor.co
   jenkins: npd-jenkins.co
   vault: npd-vault.co
-  coroot: npd-coroot.co
   kafkaUi: npd-kafka-ui.co
   keycloak: npd-keycloak.co
+  minio: npd-minio.co
+  minioConsole: npd-minio-console.co
+  grafana: npd-grafana.co
+  prometheus: npd-prometheus.co
+  alertmanager: npd-alertmanager.co
+  kibana: npd-kibana.co

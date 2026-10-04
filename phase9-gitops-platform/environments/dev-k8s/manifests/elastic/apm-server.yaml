@@ -1,0 +1,29 @@
+# APM Server — nhận OTLP gRPC/HTTP từ OTel Collector (cổng 8200, HTTP thường trong cluster).
+# Secret token: Secret apm-apm-token (key secret-token) — OTel Collector đọc qua secretKeyRef.
+apiVersion: apm.k8s.elastic.co/v1
+kind: ApmServer
+metadata:
+  name: apm
+  namespace: observability
+spec:
+  version: 8.19.22
+  count: 1
+  elasticsearchRef:
+    name: es
+  kibanaRef:
+    name: kb
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: true
+  podTemplate:
+    spec:
+      containers:
+        - name: apm-server
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

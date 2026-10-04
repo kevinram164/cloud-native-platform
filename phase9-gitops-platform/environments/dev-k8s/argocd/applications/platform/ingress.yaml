@@ -1,5 +1,7 @@
-# Ingress HAProxy cho UI platform (argocd, harbor, jenkins, vault, keycloak, coroot, kafka-ui)
-# Namespace kafka/observability/keycloak do Application khác tạo — retry đến khi tồn tại.
+# Ingress HAProxy cho UI platform (argocd, harbor, jenkins, vault, keycloak, kafka-ui)
+# Namespace kafka/keycloak do Application khác tạo — retry đến khi tồn tại.
+# Ingress MinIO / Grafana / Prometheus / Alertmanager / Kibana nằm cùng app của chúng
+# (manifests/minio, manifests/monitoring, manifests/elastic).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -1,5 +1,7 @@
-# OpenTelemetry Collector — dev-k8s, chỉ export sang Coroot
+# OpenTelemetry Collector — dev-k8s, gateway OTLP → Elastic APM Server (traces/metrics/logs)
 # Chart: open-telemetry/opentelemetry-collector
+# App gửi OTLP tới opentelemetry-collector.observability:4317 (gRPC) / :4318 (HTTP).
+# APM Server (ECK, manifests/elastic/apm-server.yaml) nhận OTLP gRPC native trên :8200.
 
 fullnameOverride: opentelemetry-collector
 mode: deployment
@@ -7,6 +9,7 @@ replicaCount: 1
 
 image:
   repository: otel/opentelemetry-collector-contrib
+  tag: "0.114.0"
 
 presets:
   kubernetesAttributes:
@@ -17,6 +20,12 @@ extraEnvs:
     valueFrom:
       fieldRef:
         fieldPath: status.podIP
+  # Secret do ECK tạo cùng ns observability
+  - name: APM_SECRET_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: apm-apm-token
+        key: secret-token
 
 config:
   extensions:
@@ -48,27 +57,38 @@ config:
         - key: host.name
           from_attribute: k8s.node.name
           action: insert
+        # APM UI nhóm theo environment
+        - key: deployment.environment
+          value: dev-k8s
+          action: insert
   exporters:
-    otlphttp/coroot:
-      endpoint: http://coroot-coroot.observability.svc.cluster.local:8080
+    otlp/apm:
+      endpoint: apm-apm-http.observability.svc.cluster.local:8200
       tls:
         insecure: true
-      compression: none
+      headers:
+        Authorization: "Bearer ${env:APM_SECRET_TOKEN}"
+      sending_queue:
+        enabled: true
+        queue_size: 2000
+      retry_on_failure:
+        enabled: true
+        max_elapsed_time: 120s
   service:
     extensions: [health_check]
     pipelines:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlphttp/coroot]
+        exporters: [otlp/apm]
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlphttp/coroot]
+        exporters: [otlp/apm]
       logs:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlphttp/coroot]
+        exporters: [otlp/apm]
 
 resources:
   requests:

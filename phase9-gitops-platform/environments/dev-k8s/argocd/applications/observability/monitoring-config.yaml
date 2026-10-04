@@ -1,0 +1,36 @@
+# ServiceMonitor/PodMonitor, PrometheusRule, dashboard Grafana, Ingress monitoring (kustomize)
+# Cần CRD monitoring.coreos.com từ kube-prometheus-stack (wave 0) → wave 1 + SkipDryRunOnMissingResource.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-monitoring-config
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kevinram164/cloud-native-platform.git
+    targetRevision: main
+    path: phase9-gitops-platform/environments/dev-k8s/manifests/monitoring
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+      # Dashboard JSON lớn → ConfigMap vượt giới hạn annotation last-applied
+      - ServerSideApply=true
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

@@ -1,0 +1,32 @@
+# Đi cùng app infra-minio (không để trong manifests/ingress): ns minio luôn có trước khi apply.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio
+  namespace: minio
+  annotations:
+    haproxy.org/ssl-redirect: "false"
+    haproxy.org/timeout-server: "900s"
+spec:
+  ingressClassName: haproxy
+  rules:
+    - host: npd-minio.co
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9000
+    - host: npd-minio-console.co
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9001

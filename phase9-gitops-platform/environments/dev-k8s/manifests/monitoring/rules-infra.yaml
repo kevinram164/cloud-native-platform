@@ -1,0 +1,151 @@
+# Alert infra dùng chung (team infra): datastore, Kafka, Kong, RabbitMQ, MinIO, Elasticsearch.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-infra-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: infra.datastore
+      rules:
+        - alert: PostgresDown
+          expr: |
+            pg_up{namespace="postgres"} == 0 or up{namespace="postgres"} == 0
+          for: 3m
+          labels:
+            severity: critical
+            team: infra
+          annotations:
+            summary: "Postgres {{ $labels.pod }} down"
+            description: "Exporter không kết nối được Postgres hoặc target down 3m ({{ $labels.instance }})."
+
+        - alert: PostgresTooManyConnections
+          expr: |
+            sum by (pod) (pg_stat_activity_count{namespace="postgres"})
+              / on (pod) max by (pod) (pg_settings_max_connections{namespace="postgres"}) > 0.8
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "Postgres {{ $labels.pod }} dùng > 80% max_connections"
+            description: "Tỉ lệ kết nối {{ $value | humanizePercentage }}."
+
+        - alert: RedisDown
+          expr: |
+            redis_up{namespace="redis"} == 0 or up{namespace="redis"} == 0
+          for: 3m
+          labels:
+            severity: critical
+            team: infra
+          annotations:
+            summary: "Redis {{ $labels.pod }} down"
+            description: "Redis scrape target down 3m."
+
+    - name: infra.kafka
+      rules:
+        - alert: KafkaTargetDown
+          expr: |
+            up{namespace="kafka"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "Kafka scrape target down"
+            description: "Kafka/exporter target {{ $labels.instance }} down 5m."
+
+        - alert: KafkaUnderReplicatedPartitions
+          expr: |
+            sum(kafka_server_replicamanager_underreplicatedpartitions{namespace="kafka"}) > 0
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "Kafka có partition under-replicated"
+            description: "{{ $value }} partition under-replicated trong 10m — broker chậm hoặc mất."
+
+        - alert: KafkaConsumerLagHigh
+          expr: |
+            sum by (consumergroup, topic) (kafka_consumergroup_lag{namespace="kafka"}) > 1000
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "Kafka consumer lag high"
+            description: "Group {{ $labels.consumergroup }} topic {{ $labels.topic }} lag {{ $value }}."
+
+    - name: infra.gateway
+      rules:
+        - alert: KongDown
+          expr: |
+            up{namespace="kong"} == 0
+          for: 3m
+          labels:
+            severity: critical
+            team: infra
+          annotations:
+            summary: "Kong metrics target down"
+            description: "Kong instance {{ $labels.instance }} down."
+
+        - alert: KongDatastoreUnreachable
+          expr: |
+            kong_datastore_reachable{namespace="kong"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: infra
+          annotations:
+            summary: "Kong không kết nối được Postgres"
+            description: "kong_datastore_reachable=0 trên {{ $labels.instance }}."
+
+        - alert: RabbitmqDown
+          expr: |
+            up{namespace="rabbit"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "RabbitMQ metrics target down"
+            description: "Rabbit scrape down — kiểm tra pod rabbitmq-0 / plugin rabbitmq_prometheus."
+
+        - alert: RabbitmqQueueBacklog
+          expr: |
+            sum by (queue) (rabbitmq_queue_messages_ready{namespace="rabbit"}) > 1000
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "RabbitMQ queue {{ $labels.queue }} tồn > 1000 message"
+            description: "Consumer chậm hoặc dừng ({{ $value }} message ready)."
+
+    - name: infra.storage
+      rules:
+        - alert: MinioDown
+          expr: |
+            up{namespace="minio"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "MinIO metrics target down"
+            description: "MinIO {{ $labels.instance }} không scrape được 5m."
+
+        - alert: PersistentVolumeFilling
+          expr: |
+            kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes < 0.15
+            and kubelet_volume_stats_used_bytes > 0
+          for: 15m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} còn < 15%"
+            description: "Dung lượng trống {{ $value | humanizePercentage }}. NFS subdir: số liệu theo quota PVC."

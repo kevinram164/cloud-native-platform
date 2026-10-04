@@ -1,5 +1,6 @@
 # AppProject platform — dev-k8s (kubeadm + Cilium + HAProxy ingress)
-# Platform (Jenkins, Harbor, Vault, observability) + infra dùng chung (Postgres, Redis, RabbitMQ, Kong, Kafka).
+# Platform (Jenkins, Harbor, Vault, Keycloak) + infra dùng chung (Postgres, Redis, RabbitMQ, Kong, Kafka, MinIO)
+# + observability (kube-prometheus-stack, ECK Elasticsearch/Kibana/APM, Fluent Bit, OTel Collector).
 # Ứng dụng banking thuộc AppProject banking ở repo banking-demo (deploy/dev-k8s).
 # Áp dụng: kubectl apply -f phase9-gitops-platform/environments/dev-k8s/appproject.yaml -n argocd
 apiVersion: argoproj.io/v1alpha1
@@ -21,8 +22,10 @@ spec:
     - https://helm.releases.hashicorp.com
     - https://helm.goharbor.io
     - https://charts.jenkins.io
-    - https://coroot.github.io/helm-charts
     - https://open-telemetry.github.io/opentelemetry-helm-charts
+    - https://prometheus-community.github.io/helm-charts
+    - https://helm.elastic.co
+    - https://fluent.github.io/helm-charts
     - https://strimzi.io/charts/
     - https://kafbat.github.io/helm-charts
   destinations:
@@ -42,7 +45,13 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: keycloak
       server: https://kubernetes.default.svc
+    - namespace: minio
+      server: https://kubernetes.default.svc
     - namespace: observability
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    - namespace: elastic-system
       server: https://kubernetes.default.svc
     - namespace: kube-system
       server: https://kubernetes.default.svc
@@ -67,8 +76,8 @@ spec:
       kind: ClusterRoleBinding
     - group: apiregistration.k8s.io
       kind: APIService
-    - group: coroot.com
-      kind: "*"
+    - group: scheduling.k8s.io
+      kind: PriorityClass
   namespaceResourceWhitelist:
     - group: "*"
       kind: "*"

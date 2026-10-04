@@ -1,5 +1,8 @@
-# Observability — Coroot + OTEL Collector (dev-k8s)
-# Sync sau platform, trước khi deploy app (banking-demo, ...)
+# Observability (dev-k8s) — sync sau platform, trước khi deploy app (banking-demo, ...)
+#   wave 0: kube-prometheus-stack (ns monitoring), eck-operator (ns elastic-system)
+#   wave 1: monitoring-config (ServiceMonitor/Rule/dashboard/ingress), elastic-stack (ES/Kibana/APM, ns observability)
+#   wave 2: fluent-bit (log → ES), otel-collector (OTLP → APM Server)
+# Mỗi app tự CreateNamespace + giữ Ingress của mình → không phụ thuộc namespace của app khác.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

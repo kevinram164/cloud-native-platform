@@ -1,0 +1,214 @@
+# Fluent Bit (DaemonSet) → Elasticsearch ECK — tách index logs-bank / logs-shop / logs-movie / logs-infra
+# Chart: fluent/fluent-bit. Port từ phase9-gitops-platform/logging/values-fluent-bit.yaml (OpenSearch/OCP).
+# Index template + ILM 7 ngày + replicas 0: Job es-setup (manifests/elastic/es-setup.yaml).
+# Thêm namespace: sửa regex grep allowlist + rewrite_tag logs.infra bên dưới.
+
+kind: DaemonSet
+
+image:
+  repository: cr.fluentbit.io/fluent/fluent-bit
+  tag: 3.2.2
+
+serviceAccount:
+  create: true
+  name: fluent-bit
+
+rbac:
+  create: true
+  nodeAccess: true
+
+serviceMonitor:
+  enabled: true
+
+testFramework:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Chạy cả trên master (log control-plane không thu nhưng pod platform có thể nằm đó)
+tolerations:
+  - operator: Exists
+
+# Secret ECK cùng ns observability
+env:
+  - name: ELASTIC_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: es-es-elastic-user
+        key: elastic
+
+daemonSetVolumes:
+  - name: varlog
+    hostPath:
+      path: /var/log
+  # Offset DB trên host: restart pod không đọc lại từ đầu (tránh log trùng)
+  - name: flb-state
+    hostPath:
+      path: /var/lib/fluent-bit
+      type: DirectoryOrCreate
+
+daemonSetVolumeMounts:
+  - name: varlog
+    mountPath: /var/log
+    readOnly: true
+  - name: flb-state
+    mountPath: /var/lib/fluent-bit
+
+config:
+  service: |
+    [SERVICE]
+        Daemon Off
+        Flush 5
+        Log_Level info
+        Parsers_File /fluent-bit/etc/parsers.conf
+        HTTP_Server On
+        HTTP_Listen 0.0.0.0
+        HTTP_Port {{ .Values.metricsPort }}
+        Health_Check On
+
+  inputs: |
+    [INPUT]
+        Name              tail
+        Path              /var/log/containers/*.log
+        Exclude_Path      *_fluent-bit-*.log,*_kube-system_*.log
+        multiline.parser  cri
+        Tag               kube.*
+        Mem_Buf_Limit     32MB
+        Skip_Long_Lines   On
+        Refresh_Interval  5
+        DB                /var/lib/fluent-bit/flb_kube.db
+
+  filters: |
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude On
+        Labels              Off
+        Annotations         Off
+        Buffer_Size         1MB
+
+    [FILTER]
+        Name    grep
+        Match   kube.*
+        Regex   $kubernetes['namespace_name'] ^(npd-banking|npd-shop|npd-movie|kafka|platform|observability|monitoring|argocd|kong|vault|keycloak|postgres|redis|rabbit|minio)$
+
+    [FILTER]
+        Name    grep
+        Match   kube.*
+        Exclude $kubernetes['container_name'] ^(fluent-bit|POD|pause|vault-agent|vault-agent-init)$
+
+    [FILTER]
+        Name          rewrite_tag
+        Match         kube.*
+        Rule          $kubernetes['namespace_name'] ^npd-banking$ logs.bank false
+        Rule          $kubernetes['namespace_name'] ^npd-shop$ logs.shop false
+        Rule          $kubernetes['namespace_name'] ^npd-movie$ logs.movie false
+        Rule          $kubernetes['namespace_name'] ^(kafka|platform|observability|monitoring|argocd|kong|vault|keycloak|postgres|redis|rabbit|minio)$ logs.infra false
+        Emitter_Name  re_emitted
+        Emitter_Storage.type memory
+
+    # JSON business logs → field event, outcome, … (dòng không phải JSON giữ nguyên log)
+    [FILTER]
+        Name          parser
+        Match         logs.bank
+        Key_Name      log
+        Parser        json
+        Reserve_Data  On
+
+    [FILTER]
+        Name          parser
+        Match         logs.shop
+        Key_Name      log
+        Parser        json
+        Reserve_Data  On
+
+  # Write_Operation index: retry không 409 (create + Generate_ID bị version_conflict)
+  # Retry_Limit hữu hạn: tránh backlog infra chặn bank/shop
+  outputs: |
+    [OUTPUT]
+        Name               es
+        Match              logs.bank
+        Host               es-es-http.observability.svc
+        Port               9200
+        HTTP_User          elastic
+        HTTP_Passwd        ${ELASTIC_PASSWORD}
+        tls                On
+        tls.verify         Off
+        Suppress_Type_Name On
+        Logstash_Format    On
+        Logstash_Prefix    logs-bank
+        Logstash_DateFormat %Y.%m.%d
+        Replace_Dots       On
+        Generate_ID        On
+        Write_Operation    index
+        Retry_Limit        5
+        Trace_Error        Off
+
+    [OUTPUT]
+        Name               es
+        Match              logs.shop
+        Host               es-es-http.observability.svc
+        Port               9200
+        HTTP_User          elastic
+        HTTP_Passwd        ${ELASTIC_PASSWORD}
+        tls                On
+        tls.verify         Off
+        Suppress_Type_Name On
+        Logstash_Format    On
+        Logstash_Prefix    logs-shop
+        Logstash_DateFormat %Y.%m.%d
+        Replace_Dots       On
+        Generate_ID        On
+        Write_Operation    index
+        Retry_Limit        5
+        Trace_Error        Off
+
+    [OUTPUT]
+        Name               es
+        Match              logs.movie
+        Host               es-es-http.observability.svc
+        Port               9200
+        HTTP_User          elastic
+        HTTP_Passwd        ${ELASTIC_PASSWORD}
+        tls                On
+        tls.verify         Off
+        Suppress_Type_Name On
+        Logstash_Format    On
+        Logstash_Prefix    logs-movie
+        Logstash_DateFormat %Y.%m.%d
+        Replace_Dots       On
+        Generate_ID        On
+        Write_Operation    index
+        Retry_Limit        5
+        Trace_Error        Off
+
+    [OUTPUT]
+        Name               es
+        Match              logs.infra
+        Host               es-es-http.observability.svc
+        Port               9200
+        HTTP_User          elastic
+        HTTP_Passwd        ${ELASTIC_PASSWORD}
+        tls                On
+        tls.verify         Off
+        Suppress_Type_Name On
+        Logstash_Format    On
+        Logstash_Prefix    logs-infra
+        Logstash_DateFormat %Y.%m.%d
+        Replace_Dots       On
+        Generate_ID        On
+        Write_Operation    index
+        Retry_Limit        5
+        Trace_Error        Off
+
+hotReload:
+  enabled: false

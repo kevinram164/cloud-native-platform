@@ -1,0 +1,32 @@
+# Monitoring config cho kube-prometheus-stack (app observability-monitoring-config).
+# Dashboard: thả file .json vào dashboards/ rồi thêm vào configMapGenerator; Grafana sidecar
+# nạp mọi ConfigMap có label grafana_dashboard=1, folder theo annotation grafana_folder.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - servicemonitors.yaml
+  - rules-apps.yaml
+  - rules-infra.yaml
+  - rules-platform.yaml
+  - ingress.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: NPD
+
+configMapGenerator:
+  - name: dashboard-npd-banking
+    files: [dashboards/npd-banking.json]
+  - name: dashboard-npd-shop
+    files: [dashboards/npd-shop.json]
+  - name: dashboard-npd-infra
+    files: [dashboards/npd-infra.json]
+  - name: dashboard-npd-kong
+    files: [dashboards/npd-kong.json]
+  - name: dashboard-npd-rabbitmq
+    files: [dashboards/npd-rabbitmq.json]

@@ -1,0 +1,34 @@
+# Elasticsearch (1 node) + Kibana + APM Server (ECK CR) + es-setup (ILM, index template, user grafana)
+# + Ingress npd-kibana.co — ns observability. CRD từ observability-eck-operator (wave 0).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-elastic-stack
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: logging
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/kevinram164/cloud-native-platform.git
+    targetRevision: main
+    path: phase9-gitops-platform/environments/dev-k8s/manifests/elastic
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

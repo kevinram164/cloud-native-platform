@@ -1,0 +1,77 @@
+# Bitnami MinIO — dev-k8s, dùng chung (CineHome media, backup, ...). API https://npd-minio.co, console https://npd-minio-console.co
+# PVC `minio` (ns minio) → folder NFS minio/minio của cụm OCP cũ (UID 1001).
+# Root credential: Vault Agent (role minio) render thẳng vào /opt/bitnami/minio/secrets/{root-user,root-password}
+#   từ secret/platform/minio {root_user, root_password}; chart đọc qua MINIO_ROOT_*_FILE, không tạo Secret.
+#   Phải giữ đúng root cred cũ: MinIO mã hoá IAM/config trên đĩa bằng root credential.
+
+mode: standalone
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/minio
+  tag: 2025.7.23-debian-12-r5
+
+auth:
+  useSecret: false
+  useCredentialsFiles: true
+  # Chỉ để chart bỏ qua việc tạo Secret ngẫu nhiên (minio.createSecret trả "false" vẫn là truthy →
+  # Secret random + checksum đổi mỗi lần render → pod restart liên tục). Secret này không cần tồn tại.
+  existingSecret: minio-vault-managed
+
+serviceAccount:
+  create: true
+  name: minio
+
+podAnnotations:
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
+  vault.hashicorp.com/agent-pre-populate-only: "true"
+  vault.hashicorp.com/role: "minio"
+  # Chart chạy tpl trên podAnnotations → template Vault bọc {{` `}} để Helm giữ nguyên.
+  vault.hashicorp.com/agent-inject-secret-root-user: "secret/data/platform/minio"
+  vault.hashicorp.com/secret-volume-path-root-user: "/opt/bitnami/minio/secrets"
+  vault.hashicorp.com/agent-inject-template-root-user: |-
+    {{`{{- with secret "secret/data/platform/minio" -}}
+    {{- .Data.data.root_user -}}
+    {{- end -}}`}}
+  vault.hashicorp.com/agent-inject-secret-root-password: "secret/data/platform/minio"
+  vault.hashicorp.com/secret-volume-path-root-password: "/opt/bitnami/minio/secrets"
+  vault.hashicorp.com/agent-inject-template-root-password: |-
+    {{`{{- with secret "secret/data/platform/minio" -}}
+    {{- .Data.data.root_password -}}
+    {{- end -}}`}}
+
+extraEnvVars:
+  - name: MINIO_API_CORS_ALLOW_ORIGIN
+    value: "*"
+  - name: MINIO_BROWSER_REDIRECT_URL
+    value: "https://npd-minio-console.co"
+persistence:
+  enabled: true
+  storageClass: nfs-csi
+  size: 200Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+service:
+  type: ClusterIP
+  ports:
+    api: 9000
+    console: 9001
+
+metrics:
+  serviceMonitor:
+    enabled: false
+
+networkPolicy:
+  enabled: false

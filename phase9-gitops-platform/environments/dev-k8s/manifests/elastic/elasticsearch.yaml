@@ -1,0 +1,38 @@
+# Elasticsearch 1 node (master+data+ingest) — lab; index template đặt replicas 0 (es-setup) để cluster green.
+# Service: es-es-http:9200 (HTTPS, cert self-signed ECK). User elastic: Secret es-es-elastic-user (key elastic).
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: es
+  namespace: observability
+spec:
+  version: 8.19.22
+  nodeSets:
+    - name: default
+      count: 1
+      config:
+        # Không cần sysctl vm.max_map_count trên worker
+        node.store.allow_mmap: false
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              env:
+                - name: ES_JAVA_OPTS
+                  value: "-Xms2g -Xmx2g"
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 4Gi
+                limits:
+                  cpu: "2"
+                  memory: 4Gi
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes: [ReadWriteOnce]
+            storageClassName: nfs-csi
+            resources:
+              requests:
+                storage: 50Gi

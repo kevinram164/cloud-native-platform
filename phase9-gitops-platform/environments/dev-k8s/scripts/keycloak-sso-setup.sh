@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Keycloak realm `platform` cho SSO ArgoCD / Jenkins / Harbor (idempotent, chạy lại được).
+# Keycloak realm `platform` cho SSO ArgoCD / Jenkins / Harbor / Grafana (idempotent, chạy lại được).
 #   - realm platform, group platform-admin
-#   - client argocd / jenkins / harbor (confidential, redirect theo domain npd-<app>.co, mapper groups)
+#   - client argocd / jenkins / harbor / grafana (confidential, redirect theo domain npd-<app>.co, mapper groups)
 #   - (tuỳ chọn) user SSO_USER ∈ platform-admin
-#   - ghi client secret vào Vault secret/platform/keycloak-clients {argocd, jenkins, harbor}
+#   - ghi client secret vào Vault secret/platform/keycloak-clients {argocd, jenkins, harbor, grafana}
 #
 #   export VAULT_TOKEN=<root/admin token>
 #   export KC_ADMIN_PASSWORD=<mật khẩu admin realm master>   # DB cũ OCP: admin cũ vẫn còn
@@ -74,6 +74,8 @@ JENKINS_SECRET=$(client jenkins https://npd-jenkins.co \
   '["https://npd-jenkins.co/securityRealm/finishLogin"]')
 HARBOR_SECRET=$(client harbor https://npd-harbor.co \
   '["https://npd-harbor.co/c/oidc/callback"]')
+GRAFANA_SECRET=$(client grafana https://npd-grafana.co \
+  '["https://npd-grafana.co/login/generic_oauth"]')
 
 if [[ -n "${SSO_USER:-}" ]]; then
   echo "==> User ${SSO_USER} ∈ ${ADMIN_GROUP}"
@@ -91,8 +93,10 @@ fi
 echo "==> Vault secret/platform/keycloak-clients"
 kubectl exec -i -n "${VAULT_NS}" vault-0 -- env VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN="${VAULT_TOKEN}" \
   vault kv put secret/platform/keycloak-clients \
-    argocd="${ARGOCD_SECRET}" jenkins="${JENKINS_SECRET}" harbor="${HARBOR_SECRET}" >/dev/null
+    argocd="${ARGOCD_SECRET}" jenkins="${JENKINS_SECRET}" harbor="${HARBOR_SECRET}" \
+    grafana="${GRAFANA_SECRET}" >/dev/null
 
 echo
 echo "OK. Issuer: https://npd-keycloak.co/realms/${REALM}"
-echo "Tiếp: argocd-oidc-keycloak.sh, harbor-oidc-keycloak.sh; Jenkins tự đọc secret qua Vault Agent."
+echo "Tiếp: argocd-oidc-keycloak.sh, harbor-oidc-keycloak.sh; Jenkins/Grafana tự đọc secret qua Vault Agent"
+echo "(pod đang chạy cần restart: kubectl -n platform delete pod jenkins-0; kubectl -n monitoring rollout restart deploy kube-prometheus-stack-grafana)."

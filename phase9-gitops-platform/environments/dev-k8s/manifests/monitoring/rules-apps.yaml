@@ -1,0 +1,106 @@
+# Alert ứng dụng (team banking/shop) → Alertmanager route nhanh (group_wait 10s, repeat 30m).
+# Triệu chứng chính = 503/5xx (consumer down); kube rule chỉ báo khi desired>0 (không nhầm với scale=0).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-banking-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: banking.symptoms
+      rules:
+        - alert: BankingTransferUnavailable
+          expr: |
+            sum(rate(http_requests_total{namespace="npd-banking", status=~"503|504"}[5m])) > 0
+          for: 0m
+          labels:
+            severity: critical
+            team: banking
+            tier: symptom
+            impact: transfer
+            namespace: npd-banking
+          annotations:
+            summary: "Transfer/downstream không hoạt động — API trả 503/504"
+            description: >-
+              Có HTTP 503/504 trên ns npd-banking (thường api-producer timeout chờ transfer).
+              Log (Kibana logs-bank-*): producer_timeout / downstream_unavailable.
+
+        - alert: BankingProducer5xx
+          expr: |
+            sum(rate(http_requests_total{namespace="npd-banking", job=~".*api-producer.*", status=~"5.."}[5m])) > 0
+          for: 0m
+          labels:
+            severity: critical
+            team: banking
+            tier: symptom
+            impact: transfer
+            namespace: npd-banking
+          annotations:
+            summary: "api-producer đang trả 5xx"
+            description: "rate 5xx > 0 trên api-producer."
+
+        - alert: BankingTargetDown
+          expr: |
+            up{namespace="npd-banking"} == 0
+          for: 3m
+          labels:
+            severity: critical
+            team: banking
+            namespace: npd-banking
+          annotations:
+            summary: "Banking {{ $labels.job }} không scrape được"
+            description: "Target {{ $labels.instance }} ({{ $labels.job }}) down 3m — pod crash hoặc /metrics lỗi."
+
+    - name: banking.kube
+      rules:
+        - alert: BankingDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{namespace="npd-banking"} > 0
+            and
+            kube_deployment_spec_replicas{namespace="npd-banking"} > 0
+          for: 5m
+          labels:
+            severity: warning
+            team: banking
+            tier: infra
+            namespace: npd-banking
+          annotations:
+            summary: "Pod banking unavailable (crash/probe) — {{ $labels.deployment }}"
+            description: "desired>0 nhưng unavailable>0 trong 5m (sự cố thật, không phải scale=0)."
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-shop-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: shop.apps
+      rules:
+        - alert: ShopPodNotReady
+          expr: |
+            kube_deployment_status_replicas_unavailable{namespace="npd-shop"} > 0
+            and
+            kube_deployment_spec_replicas{namespace="npd-shop"} > 0
+          for: 5m
+          labels:
+            severity: warning
+            team: shop
+          annotations:
+            summary: "Shop deployment unavailable"
+            description: "{{ $labels.deployment }} in npd-shop has unavailable replicas."
+
+        - alert: ShopPodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="npd-shop"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            team: shop
+          annotations:
+            summary: "Shop pod restarting"
+            description: "Pod {{ $labels.pod }} restarted >3 times in 15m."

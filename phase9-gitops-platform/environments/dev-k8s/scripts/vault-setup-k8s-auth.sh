@@ -12,6 +12,10 @@
 # rabbitmq            rabbitmq (rabbit)                                   rabbitmq/admin
 # banking-app         auth/account/transfer/notification/api-producer     banking/db, banking/rabbitmq
 #                     (npd-banking)
+# minio               minio, minio-bucket-init (minio)                    platform/minio
+# grafana             kube-prometheus-stack-grafana (monitoring)          platform/grafana, platform/keycloak-clients, platform/elastic
+# alertmanager        kube-prometheus-stack-alertmanager (monitoring)     platform/alertmanager-telegram
+# elastic-setup       es-setup (observability)                            platform/elastic
 set -euo pipefail
 
 : "${VAULT_TOKEN:?export VAULT_TOKEN trước khi chạy}"
@@ -72,13 +76,37 @@ path "secret/data/banking/db" { capabilities = ["read"] }
 path "secret/data/banking/rabbitmq" { capabilities = ["read"] }
 EOF
 
+policy minio <<'EOF'
+path "secret/data/platform/minio" { capabilities = ["read"] }
+EOF
+
+policy grafana <<'EOF'
+path "secret/data/platform/grafana" { capabilities = ["read"] }
+path "secret/data/platform/keycloak-clients" { capabilities = ["read"] }
+path "secret/data/platform/elastic" { capabilities = ["read"] }
+EOF
+
+policy alertmanager <<'EOF'
+path "secret/data/platform/alertmanager-telegram" { capabilities = ["read"] }
+EOF
+
+policy elastic-setup <<'EOF'
+path "secret/data/platform/elastic" { capabilities = ["read"] }
+EOF
+
 role jenkins-kaniko jenkins-kaniko platform jenkins-kaniko
 role jenkins jenkins platform jenkins
 role keycloak keycloak,keycloak-db-init keycloak,postgres keycloak
 role rabbitmq rabbitmq rabbit rabbitmq
 role banking-app "${BANKING_SAS}" "${BANKING_NS}" banking-app
+role minio minio,minio-bucket-init minio minio
+role grafana kube-prometheus-stack-grafana monitoring grafana
+role alertmanager kube-prometheus-stack-alertmanager monitoring alertmanager
+role elastic-setup es-setup observability elastic-setup
 
 echo "==> Kiểm tra secret đã seed"
-for p in platform/harbor platform/harbor-pull platform/github platform/jenkins platform/keycloak platform/keycloak-clients rabbitmq/admin banking/db banking/rabbitmq; do
+for p in platform/harbor platform/harbor-pull platform/github platform/jenkins platform/keycloak platform/keycloak-clients \
+         platform/minio platform/grafana platform/alertmanager-telegram platform/elastic \
+         rabbitmq/admin banking/db banking/rabbitmq; do
   vexec "vault kv get secret/$p >/dev/null 2>&1" && echo "OK      secret/$p" || echo "MISSING secret/$p"
 done

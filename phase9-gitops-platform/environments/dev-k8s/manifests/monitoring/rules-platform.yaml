@@ -1,0 +1,232 @@
+# Node / disk / network (team platform) — port từ monitoring/manifests/prometheusrules/platform (OCP).
+# kube-prometheus-stack đã có rule mặc định (KubeNodeNotReady, NodeFilesystem*...); các rule NPD* giữ
+# tên cũ cho Telegram. Control-plane (etcd/scheduler) không có vì kubeadm bind 127.0.0.1.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-platform-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: npd.nodes
+      rules:
+        - alert: NPDNodeNotReady
+          expr: |
+            kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+            component: node
+          annotations:
+            summary: "Node {{ $labels.node }} NotReady"
+            description: "Node {{ $labels.node }} Ready=false 5m. Kiểm tra kubelet, Cilium, `kubectl describe node {{ $labels.node }}`."
+
+        - alert: NPDNodeHighCPU
+          expr: |
+            100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="idle"}[5m]))) > 85
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            component: node
+          annotations:
+            summary: "Node CPU > 85% ({{ $labels.instance }})"
+            description: "CPU {{ $value | humanize }}% trên {{ $labels.instance }} 10m. Nếu iowait cũng cao → do storage (NFS)."
+
+        - alert: NPDNodeMemoryPressure
+          expr: |
+            100 * (1 - (node_memory_MemAvailable_bytes{job="node-exporter"} / node_memory_MemTotal_bytes{job="node-exporter"})) > 90
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            component: node
+          annotations:
+            summary: "Node memory > 90% ({{ $labels.instance }})"
+            description: "MemAvailable-based {{ $value | humanize }}% trên {{ $labels.instance }} (page cache tính là trống)."
+
+        - alert: NPDNodeKubeMemoryPressure
+          expr: |
+            kube_node_status_condition{condition="MemoryPressure",status="true"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+            component: node
+          annotations:
+            summary: "MemoryPressure on {{ $labels.node }}"
+            description: "Kubelet báo MemoryPressure — có thể bắt đầu evict pod."
+
+        - alert: NPDNodeKubeDiskPressure
+          expr: |
+            kube_node_status_condition{condition="DiskPressure",status="true"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+            component: node
+          annotations:
+            summary: "DiskPressure on {{ $labels.node }}"
+            description: "Kubelet báo DiskPressure (imagefs/nodefs)."
+
+        - alert: NPDNodePIDPressure
+          expr: |
+            kube_node_status_condition{condition="PIDPressure",status="true"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+            component: node
+          annotations:
+            summary: "PIDPressure on {{ $labels.node }}"
+            description: "Bảng process bị đầy — kiểm tra process rò rỉ."
+
+        - alert: NPDNodeNetworkUnavailable
+          expr: |
+            kube_node_status_condition{condition="NetworkUnavailable",status="true"} == 1
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+            component: node
+          annotations:
+            summary: "NetworkUnavailable on {{ $labels.node }}"
+            description: "Cilium chưa đánh dấu network của node sẵn sàng."
+
+        - alert: NPDNodeCPUIoWaitHigh
+          expr: |
+            100 * avg by (instance) (rate(node_cpu_seconds_total{job="node-exporter",mode="iowait"}[5m])) > 20
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            component: node
+          annotations:
+            summary: "CPU I/O wait > 20% ({{ $labels.instance }})"
+            description: "CPU chờ block I/O {{ $value | humanize }}% — thường do độ trễ storage/NFS."
+
+    - name: npd.disk
+      rules:
+        - alert: NPDInfraFilesystemFilling
+          expr: |
+            100 * (1 - (
+              node_filesystem_avail_bytes{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/home)$"}
+              / node_filesystem_size_bytes{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/home)$"}
+            )) > 85
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+            component: disk
+          annotations:
+            summary: "Filesystem > 85% on {{ $labels.instance }} {{ $labels.mountpoint }}"
+            description: "{{ $labels.mountpoint }} ({{ $labels.fstype }}) dùng {{ $value | humanize }}%."
+
+        - alert: NPDInfraFilesystemCritical
+          expr: |
+            100 * (1 - (
+              node_filesystem_avail_bytes{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/home)$"}
+              / node_filesystem_size_bytes{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/home)$"}
+            )) > 95
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+            component: disk
+          annotations:
+            summary: "Filesystem > 95% on {{ $labels.instance }} {{ $labels.mountpoint }}"
+            description: "Sắp hết chỗ — kubelet DiskPressure, etcd trên master có thể lỗi."
+
+        - alert: NPDInfraInodesFilling
+          expr: |
+            100 * (1 - (
+              node_filesystem_files_free{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/home)$"}
+              / clamp_min(node_filesystem_files{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/home)$"}, 1)
+            )) > 90
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+            component: disk
+          annotations:
+            summary: "Inodes > 90% on {{ $labels.instance }} {{ $labels.mountpoint }}"
+            description: "Còn dung lượng nhưng hết inode — tạo file sẽ lỗi."
+
+        - alert: NPDInfraFilesystemReadOnly
+          expr: |
+            node_filesystem_readonly{job="node-exporter",fstype=~"xfs|ext[234]|btrfs",mountpoint=~"^(/|/var|/var/lib.*|/var/log.*|/home|/tmp|/opt)$"} == 1
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+            component: disk
+          annotations:
+            summary: "Filesystem read-only {{ $labels.instance }} {{ $labels.mountpoint }}"
+            description: "Volume bị remount-ro (lỗi I/O)."
+
+        - alert: NPDInfraDiskLatencyHigh
+          expr: |
+            (
+              rate(node_disk_read_time_seconds_total{job="node-exporter",device!~"^(loop|ram|sr|fd).*"}[5m])
+              / clamp_min(rate(node_disk_reads_completed_total{job="node-exporter",device!~"^(loop|ram|sr|fd).*"}[5m]), 1e-9)
+            ) > 0.05
+            or
+            (
+              rate(node_disk_write_time_seconds_total{job="node-exporter",device!~"^(loop|ram|sr|fd).*"}[5m])
+              / clamp_min(rate(node_disk_writes_completed_total{job="node-exporter",device!~"^(loop|ram|sr|fd).*"}[5m]), 1e-9)
+            ) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            component: disk
+          annotations:
+            summary: "Disk latency > 50ms on {{ $labels.instance }} {{ $labels.device }}"
+            description: "Thời gian phục vụ trung bình {{ $value | humanizeDuration }} (read hoặc write)."
+
+        - alert: NPDInfraDiskBusyHigh
+          expr: |
+            100 * rate(node_disk_io_time_seconds_total{job="node-exporter",device!~"^(loop|ram|sr|fd).*"}[5m]) > 80
+          for: 15m
+          labels:
+            severity: warning
+            team: platform
+            component: disk
+          annotations:
+            summary: "Disk busy > 80% on {{ $labels.instance }} {{ $labels.device }}"
+            description: "Tương đương iostat %util — latency và iowait thường tăng theo."
+
+    - name: npd.network
+      rules:
+        - alert: NPDInfraNetworkErrors
+          expr: |
+            (
+              rate(node_network_receive_errs_total{job="node-exporter",device!~"lo|veth.*|lxc.*|cilium_.*|vxlan.*|genev.*|kube-ipvs0|docker.*"}[5m])
+              + rate(node_network_transmit_errs_total{job="node-exporter",device!~"lo|veth.*|lxc.*|cilium_.*|vxlan.*|genev.*|kube-ipvs0|docker.*"}[5m])
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            component: network
+          annotations:
+            summary: "NIC errors on {{ $labels.instance }} {{ $labels.device }}"
+            description: "RX+TX error {{ $value | humanize }}/s — kiểm tra cáp, duplex, vSwitch, driver."
+
+        - alert: NPDInfraNetworkDrops
+          expr: |
+            (
+              rate(node_network_receive_drop_total{job="node-exporter",device!~"lo|veth.*|lxc.*|cilium_.*|vxlan.*|genev.*|kube-ipvs0|docker.*"}[5m])
+              + rate(node_network_transmit_drop_total{job="node-exporter",device!~"lo|veth.*|lxc.*|cilium_.*|vxlan.*|genev.*|kube-ipvs0|docker.*"}[5m])
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            component: network
+          annotations:
+            summary: "NIC drops on {{ $labels.instance }} {{ $labels.device }}"
+            description: "RX+TX drop {{ $value | humanize }}/s — RX drop thường do CPU/softnet, TX drop do queue đầy."

@@ -1,0 +1,44 @@
+# MinIO (Bitnami, standalone), ns minio — object storage dùng chung
+# Values: environments/dev-k8s/values/values-minio.yaml. Bucket: manifests/minio/bucket-init.yaml (PostSync).
+# Secret: Vault secret/platform/minio {root_user, root_password} (role minio).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-minio
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: minio
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://charts.bitnami.com/bitnami
+      chart: minio
+      targetRevision: 14.8.0
+      helm:
+        releaseName: minio
+        valueFiles:
+          - $values/phase9-gitops-platform/environments/dev-k8s/values/values-minio.yaml
+    - repoURL: https://github.com/kevinram164/cloud-native-platform.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/kevinram164/cloud-native-platform.git
+      targetRevision: main
+      path: phase9-gitops-platform/environments/dev-k8s/manifests/minio
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: minio
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: false
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

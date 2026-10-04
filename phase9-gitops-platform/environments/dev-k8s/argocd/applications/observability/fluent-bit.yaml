@@ -1,0 +1,40 @@
+# Fluent Bit DaemonSet — log container → Elasticsearch ECK (index logs-bank/shop/movie/infra-YYYY.MM.DD)
+# Values: environments/dev-k8s/values/values-fluent-bit.yaml. Cần Secret es-es-elastic-user (ECK, ns observability).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: observability-fluent-bit
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: phase9-gitops
+    app.kubernetes.io/component: logging
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: platform
+  sources:
+    - repoURL: https://fluent.github.io/helm-charts
+      chart: fluent-bit
+      targetRevision: 0.48.0
+      helm:
+        releaseName: fluent-bit
+        valueFiles:
+          - $values/phase9-gitops-platform/environments/dev-k8s/values/values-fluent-bit.yaml
+    - repoURL: https://github.com/kevinram164/cloud-native-platform.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: -1
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m
