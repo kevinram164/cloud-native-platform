@@ -62,7 +62,8 @@ spec:
                 psql -d postgres -c "CREATE DATABASE keycloak;"
               psql -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='keycloak'" | grep -q 1 || \
                 psql -d postgres -c "CREATE USER keycloak;"
-              psql -d postgres -v pw="$KC_PW" -c "ALTER USER keycloak WITH PASSWORD :'pw';"
+              # biến psql (:'pw') chỉ được thay khi đọc lệnh từ stdin, không áp dụng cho -c
+              echo "ALTER USER keycloak WITH PASSWORD :'pw';" | psql -d postgres -v ON_ERROR_STOP=1 -v pw="$KC_PW"
               psql -d postgres -c "ALTER DATABASE keycloak OWNER TO keycloak;"
               psql -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE keycloak TO keycloak;"
               psql -d keycloak -c "GRANT ALL ON SCHEMA public TO keycloak;"
