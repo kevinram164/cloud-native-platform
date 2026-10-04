@@ -244,6 +244,9 @@ grafana:
       enabled: true
       skipReload: true
       initDatasources: true
+      # Init container dùng chung watchMethod (mặc định WATCH → không bao giờ thoát, Grafana không start).
+      # LIST: nạp datasource 1 lần rồi thoát; đổi datasource thì restart pod Grafana.
+      watchMethod: LIST
 
   additionalDataSources:
     - name: Elasticsearch Logs
