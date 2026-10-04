@@ -24,7 +24,7 @@ spec:
         # Dùng lại PVC từ cụm OCP: giữ true đến khi patch status.clusterId về cluster.id cũ,
         # sau đó đổi false + commit (K8S-DEPLOY-GUIDE mục 4). Cluster mới hoàn toàn: đặt false.
         # cluster.id cũ (NFS kafka/data-0-npd-kafka-dual-role-*/kafka-log*/meta.properties): n1yOEdG2SuS58OX05BgOgg
-        pauseReconciliation: true
+        pauseReconciliation: false
         nodePool:
           securityContext:
             fsGroup: 1001
