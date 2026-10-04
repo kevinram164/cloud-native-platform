@@ -1,6 +1,6 @@
 # es-setup (idempotent): ILM logs-retention-7d, index template logs-bank/shop/movie/infra (replicas 0),
 # replicas 0 cho data stream APM (1 node → green), role grafana_reader + user grafana (Grafana datasource).
-# Chạy mỗi lần sync (hook Sync, wave 1 — sau CR wave 0) và hằng ngày 03:00 (CronJob).
+# Chạy mỗi lần sync (hook Sync, wave 0 cùng CR, script tự chờ ES) và hằng ngày 03:00 (CronJob).
 # Mật khẩu: elastic từ Secret ECK es-es-elastic-user; grafana từ Vault secret/platform/elastic (grafana_password).
 apiVersion: v1
 kind: ServiceAccount
@@ -142,7 +142,9 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    argocd.argoproj.io/sync-wave: "1"
+    # Cùng wave với Elasticsearch: ES yellow (replica chưa về 0) bị ArgoCD coi là chưa healthy →
+    # wave sau sẽ không bao giờ chạy, mà chính Job này mới đưa ES về green. Script tự chờ ES.
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   backoffLimit: 6
   ttlSecondsAfterFinished: 3600
