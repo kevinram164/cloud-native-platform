@@ -1,0 +1,69 @@
+# PreSync — đảm bảo DB/user `keycloak` trên postgres-ha (idempotent).
+# DB cũ từ OCP còn trên NFS → chỉ ALTER password theo Vault secret/platform/keycloak.db_password.
+# Superuser postgres: Secret postgres-ha-postgresql do chart Bitnami tạo (cùng ns postgres).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-db-init
+  namespace: postgres
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: keycloak-db-init
+  namespace: postgres
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    app.kubernetes.io/part-of: platform-keycloak
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        app: keycloak-db-init
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/role: "keycloak"
+        vault.hashicorp.com/agent-inject-secret-db-password: "secret/data/platform/keycloak"
+        vault.hashicorp.com/agent-inject-template-db-password: |-
+          {{- with secret "secret/data/platform/keycloak" -}}
+          {{- .Data.data.db_password -}}
+          {{- end -}}
+    spec:
+      serviceAccountName: keycloak-db-init
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: postgres:16-alpine
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-ha-postgresql
+                  key: postgres-password
+            - name: PGHOST
+              value: postgres-ha-postgresql-primary.postgres.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              KC_PW="$(cat /vault/secrets/db-password)"
+              psql -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='keycloak'" | grep -q 1 || \
+                psql -d postgres -c "CREATE DATABASE keycloak;"
+              psql -d postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='keycloak'" | grep -q 1 || \
+                psql -d postgres -c "CREATE USER keycloak;"
+              psql -d postgres -v pw="$KC_PW" -c "ALTER USER keycloak WITH PASSWORD :'pw';"
+              psql -d postgres -c "ALTER DATABASE keycloak OWNER TO keycloak;"
+              psql -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE keycloak TO keycloak;"
+              psql -d keycloak -c "GRANT ALL ON SCHEMA public TO keycloak;"
+              echo "Keycloak DB init done"

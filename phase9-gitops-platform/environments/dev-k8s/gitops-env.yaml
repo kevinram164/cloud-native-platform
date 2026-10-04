@@ -36,3 +36,4 @@ domains:
   vault: npd-vault.co
   coroot: npd-coroot.co
   kafkaUi: npd-kafka-ui.co
+  keycloak: npd-keycloak.co

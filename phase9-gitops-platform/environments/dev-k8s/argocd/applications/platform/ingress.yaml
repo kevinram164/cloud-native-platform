@@ -1,5 +1,5 @@
-# Ingress HAProxy cho UI platform (argocd, harbor, jenkins, vault, coroot, kafka-ui)
-# Namespace kafka/observability do nhóm infra/observability tạo — retry đến khi tồn tại.
+# Ingress HAProxy cho UI platform (argocd, harbor, jenkins, vault, keycloak, coroot, kafka-ui)
+# Namespace kafka/observability/keycloak do Application khác tạo — retry đến khi tồn tại.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

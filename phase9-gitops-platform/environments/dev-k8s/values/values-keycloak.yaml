@@ -1,0 +1,103 @@
+# Bitnami Keycloak — dev-k8s, https://npd-keycloak.co
+# TLS kết thúc ở f5-lb → HAProxy ingress → pod HTTP 8080 (xforwarded).
+# DB: database `keycloak` trên postgres-ha (dữ liệu cũ từ OCP còn trên NFS → realm/client/user giữ nguyên).
+# Secret: Vault Agent Injector (role keycloak) render /vault/secrets/{admin-password,db-password}
+#   từ secret/platform/keycloak {admin_password, db_password}. Secret chart tự tạo (random) không dùng tới.
+#   admin_password chỉ có tác dụng khi DB trống (bootstrap); DB cũ giữ admin master cũ.
+
+fullnameOverride: keycloak
+nameOverride: keycloak
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/keycloak
+  tag: 26.3.3-debian-12-r0
+
+replicaCount: 1
+
+auth:
+  adminUser: admin
+
+production: true
+proxyHeaders: xforwarded
+httpEnabled: true
+
+serviceAccount:
+  create: true
+  name: keycloak
+
+podAnnotations:
+  vault.hashicorp.com/agent-inject: "true"
+  vault.hashicorp.com/agent-init-first: "true"
+  vault.hashicorp.com/agent-pre-populate-only: "true"
+  vault.hashicorp.com/role: "keycloak"
+  # Chart chạy tpl trên podAnnotations → template Vault bọc {{` `}} để Helm giữ nguyên.
+  vault.hashicorp.com/agent-inject-secret-admin-password: "secret/data/platform/keycloak"
+  vault.hashicorp.com/agent-inject-template-admin-password: |-
+    {{`{{- with secret "secret/data/platform/keycloak" -}}
+    {{- .Data.data.admin_password -}}
+    {{- end -}}`}}
+  vault.hashicorp.com/agent-inject-secret-db-password: "secret/data/platform/keycloak"
+  vault.hashicorp.com/agent-inject-template-db-password: |-
+    {{`{{- with secret "secret/data/platform/keycloak" -}}
+    {{- .Data.data.db_password -}}
+    {{- end -}}`}}
+
+# Bitnami đọc mật khẩu qua *_FILE (ConfigMap keycloak-env-vars trỏ vào Secret chart tự tạo).
+# env ưu tiên hơn envFrom → trỏ sang file do Vault Agent render.
+extraEnvVars:
+  - name: KC_BOOTSTRAP_ADMIN_PASSWORD_FILE
+    value: /vault/secrets/admin-password
+  - name: KC_DB_PASSWORD_FILE
+    value: /vault/secrets/db-password
+  - name: KC_HOSTNAME
+    value: "https://npd-keycloak.co"
+  - name: KC_HOSTNAME_ADMIN
+    value: "https://npd-keycloak.co"
+  - name: KC_HOSTNAME_STRICT
+    value: "true"
+  - name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC
+    value: "false"
+  - name: KC_PROXY_HEADERS
+    value: "xforwarded"
+  # bitnamilegacy Keycloak 26.x: "Incomplete line .../conf/[1,14]" — https://github.com/bitnami/charts/issues/36298
+  - name: KC_CACHE_CONFIG_FILE
+    value: cache-ispn.xml
+
+ingress:
+  enabled: false
+
+service:
+  type: ClusterIP
+  ports:
+    http: 8080
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1536Mi
+
+postgresql:
+  enabled: false
+
+externalDatabase:
+  host: postgres-ha-postgresql-primary.postgres.svc.cluster.local
+  port: 5432
+  user: keycloak
+  database: keycloak
+
+cache:
+  enabled: false
+
+metrics:
+  enabled: false
+
+networkPolicy:
+  enabled: false

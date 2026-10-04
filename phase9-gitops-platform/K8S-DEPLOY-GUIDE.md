@@ -36,6 +36,7 @@ DNS (hoặc `hosts` trên máy client) trỏ các tên sau về `10.100.1.100`:
 | `npd-vault.co` | `vault/vault:8200` | platform |
 | `npd-coroot.co` | `observability/coroot-coroot:8080` | platform |
 | `npd-kafka-ui.co` | `kafka/kafka-ui:80` | platform |
+| `npd-keycloak.co` | `keycloak/keycloak:8080` | platform |
 | `npd-banking.co` | Ingress `npd-banking` (frontend + Kong) | banking-demo |
 
 NGINX Plus trên f5-lb cần upstream `10.100.1.46:80` cho các server name trên, kèm `proxy_set_header Host $host` và `X-Forwarded-Proto https`. Với Harbor, đặt `client_max_body_size 0`.
@@ -80,7 +81,7 @@ STAGE=infra bash phase9-gitops-platform/environments/dev-k8s/apply-argocd.sh
 STAGE=observability bash phase9-gitops-platform/environments/dev-k8s/apply-argocd.sh
 ```
 
-Sau đó triển khai app từ repo của app (mục 7).
+Sau đó triển khai app từ repo của app (mục 8). SSO Keycloak: mục 6.
 
 Kiểm tra storage trước giai đoạn 3:
 
@@ -158,7 +159,8 @@ Các pod dùng `agent-pre-populate-only: "true"`: chỉ có init container, khô
 
 | Workload | SA (namespace) | Role | Secret Vault | Cách dùng |
 |----------|----------------|------|--------------|-----------|
-| Jenkins controller | `jenkins` (platform) | `jenkins` | `platform/jenkins` {`admin_username`, `admin_password`} | JCasC `${readFile:/vault/secrets/admin-*}` |
+| Jenkins controller | `jenkins` (platform) | `jenkins` | `platform/jenkins` {`admin_username`, `admin_password`}, `platform/keycloak-clients` {`jenkins`} | JCasC `${readFile:/vault/secrets/*}` (OIDC + escape hatch) |
+| Keycloak | `keycloak` (keycloak), `keycloak-db-init` (postgres) | `keycloak` | `platform/keycloak` {`admin_password`, `db_password`} | `KC_*_PASSWORD_FILE=/vault/secrets/*` |
 | Jenkins agent (Kaniko) | `jenkins-kaniko` (platform) | `jenkins-kaniko` | `platform/harbor`, `platform/github` | Pipeline gọi Vault API trực tiếp |
 | RabbitMQ | `rabbitmq` (rabbit) | `rabbitmq` | `rabbitmq/admin` {`username`, `password`} | `. /vault/secrets/env` → `RABBITMQ_DEFAULT_USER/PASS` |
 | Banking services | `auth-service`, `account-service`, `transfer-service`, `notification-service`, `api-producer` (npd-banking) | `banking-app` | `banking/db` {`DATABASE_URL`, `REDIS_URL`}, `banking/rabbitmq` {`RABBITMQ_URL`} | `. /vault/secrets/env` |
@@ -173,6 +175,7 @@ alias v='kubectl exec -i -n vault vault-0 -- env VAULT_ADDR=http://127.0.0.1:820
 
 v secrets enable -path=secret kv-v2
 v kv put secret/platform/jenkins admin_username=admin admin_password='<pass>'
+v kv put secret/platform/keycloak admin_password='<pass>' db_password='<pass>'
 v kv put secret/platform/harbor registry=npd-harbor.co username='robot$banking-demo+ci' password='<token>'
 v kv put secret/platform/harbor-pull registry=npd-harbor.co username='robot$banking-demo+k8s-pull' password='<token>'
 v kv put secret/platform/github username=<user> pat='<pat>'
@@ -221,13 +224,52 @@ systemctl restart containerd
 
 Node cũng phải phân giải được `npd-harbor.co` về `10.100.1.100`.
 
-## 6. CI (Jenkins → Harbor → GitOps)
+## 6. SSO Keycloak (ArgoCD, Harbor, Jenkins)
+
+Keycloak `https://npd-keycloak.co` (Application `platform-keycloak`, ns `keycloak`) dùng database `keycloak` trên `postgres-ha`. Khi dùng lại NFS từ OCP, realm `platform`, client, user và group cũ vẫn còn; script bên dưới chỉ cập nhật redirect URI sang domain mới. Mọi secret đi qua Vault.
+
+| Client | Redirect URI | Cách nối |
+|--------|--------------|----------|
+| `argocd` | `https://npd-argocd.co/auth/callback` | `argocd-oidc-keycloak.sh` patch `argocd-cm`, `argocd-secret`, `argocd-rbac-cm` |
+| `jenkins` | `https://npd-jenkins.co/securityRealm/finishLogin` | JCasC `securityRealm.oic`, secret qua Vault Agent |
+| `harbor` | `https://npd-harbor.co/c/oidc/callback` | `harbor-oidc-keycloak.sh` gọi Harbor API (lưu trong DB Harbor) |
+
+Lab: user thuộc group `platform-admin` là admin ở cả ba hệ thống. Backend ArgoCD/Harbor/Jenkins gọi Keycloak qua `https://npd-keycloak.co` với `insecure/skip verify` (cert f5-lb do CA nội bộ cấp).
+
+```bash
+S=phase9-gitops-platform/environments/dev-k8s/scripts
+export VAULT_TOKEN=<token>
+
+# 1. Pod phân giải được npd-*.co (bỏ qua nếu DNS nội bộ đã có bản ghi)
+bash $S/coredns-npd-hosts.sh
+
+# 2. Secret Keycloak + role Vault (DB cũ OCP: db_password=ChangeMe-Keycloak-DB, admin master cũ giữ nguyên)
+v kv put secret/platform/keycloak admin_password='<pass>' db_password='<pass>'
+bash $S/vault-setup-k8s-auth.sh
+
+# 3. Push repo → ArgoCD sync platform-keycloak (PreSync Job keycloak-db-init trên ns postgres)
+kubectl -n keycloak rollout status sts/keycloak
+
+# 4. Realm/client/group → client secret vào Vault secret/platform/keycloak-clients
+KC_ADMIN_PASSWORD='<admin master>' SSO_USER=<user> SSO_PASSWORD='<pass>' bash $S/keycloak-sso-setup.sh
+
+# 5. Nối từng hệ thống
+bash $S/argocd-oidc-keycloak.sh
+HARBOR_ADMIN_PASSWORD='<admin harbor>' bash $S/harbor-oidc-keycloak.sh
+kubectl -n platform delete pod jenkins-0     # Vault Agent render oidc-client-secret, JCasC bật OIDC
+```
+
+Jenkins: nếu Keycloak lỗi, đăng nhập bằng escape hatch (`admin` + `secret/platform/jenkins.admin_password`). Harbor: admin local ở `https://npd-harbor.co/account/sign-in`. ArgoCD: user `admin` local vẫn bật.
+
+f5-lb: thêm `f5-lb/conf.d/70-npd-keycloak.conf`.
+
+## 7. CI (Jenkins → Harbor → GitOps)
 
 - Harbor: tạo project `banking-demo`, robot `ci` (push) lưu vào `platform/harbor`, robot `k8s-pull` (pull) lưu vào `platform/harbor-pull`.
 - Jenkins: Multibranch Pipeline repo `banking-demo`, nhánh `dev-k8s`, Script Path `Jenkinsfile`.
 - Pipeline build bằng Kaniko, push `npd-harbor.co/banking-demo/<svc>`, rồi bump `tag` trong `deploy/dev-k8s/values/values-images.yaml` của chính repo `banking-demo`. ArgoCD project `banking` sync.
 
-## 7. Triển khai banking (repo `banking-demo`)
+## 8. Triển khai banking (repo `banking-demo`)
 
 Điều kiện: infra Healthy, Vault đã seed `banking/*` và chạy `vault-setup-k8s-auth.sh`, Secret `harbor-pull-creds` đã có trong `npd-banking`.
 
@@ -239,7 +281,7 @@ kubectl apply -f deploy/dev-k8s/argocd/app-of-apps.yaml
 
 Chi tiết: `banking-demo/deploy/dev-k8s/README.md`.
 
-## 8. Kiểm tra
+## 9. Kiểm tra
 
 ```bash
 kubectl get applications -n argocd

@@ -1,4 +1,4 @@
-# Platform — NFS CSI, StorageClass, Ingress, Harbor, Vault (Agent Injector), Jenkins (dev-k8s)
+# Platform — NFS CSI, StorageClass, Ingress, Harbor, Vault (Agent Injector), Jenkins, Keycloak (dev-k8s)
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

@@ -1,6 +1,7 @@
 # Jenkins — https://npd-jenkins.co
-# Admin: Vault secret/platform/jenkins {admin_username, admin_password}
-#   → Vault Agent Injector (role jenkins, SA jenkins) → /vault/secrets/admin-* → JCasC readFile
+# Login: SSO Keycloak (client jenkins, secret Vault platform/keycloak-clients.jenkins)
+# Escape hatch: Vault secret/platform/jenkins {admin_username, admin_password}
+#   → Vault Agent Injector (role jenkins, SA jenkins) → /vault/secrets/* → JCasC readFile
 # Pipeline CI: agent SA jenkins-kaniko (manifests/base) đọc trực tiếp Vault (platform/harbor, platform/github)
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -50,6 +51,13 @@ spec:
               {{`{{- with secret "secret/data/platform/jenkins" -}}
               {{- .Data.data.admin_password -}}
               {{- end -}}`}}
+            # Client secret Keycloak (scripts/keycloak-sso-setup.sh ghi vào Vault).
+            # Chưa có secret → vault-agent-init chờ, Jenkins chưa start.
+            vault.hashicorp.com/agent-inject-secret-oidc-client-secret: "secret/data/platform/keycloak-clients"
+            vault.hashicorp.com/agent-inject-template-oidc-client-secret: |-
+              {{`{{- with secret "secret/data/platform/keycloak-clients" -}}
+              {{- .Data.data.jenkins -}}
+              {{- end -}}`}}
           jenkinsUrl: https://npd-jenkins.co/
           installLatestPlugins: false
           installPlugins:
@@ -64,8 +72,7 @@ spec:
             - pipeline-groovy-lib:798.v5cc688825312
             - durable-task:686.v80ff80875b_82
             - pipeline-utility-steps:2.19.0
-            # config.xml cũ (jenkins_home trên NFS) có OicSecurityRealm → thiếu plugin là Jenkins không boot.
-            # JCasC securityRealm local ghi đè sau khi load; giữ cho lúc bật Keycloak.
+            # SSO Keycloak (JCasC securityRealm.oic). config.xml cũ trên NFS cũng dùng OicSecurityRealm.
             - oic-auth:4.690.v5821cf665e43
           additionalPlugins: []
           overwritePlugins: true
@@ -90,14 +97,27 @@ spec:
               memory: 2Gi
           JCasC:
             defaultConfig: true
+            # SSO Keycloak (realm platform, client jenkins). Escape hatch: admin + mật khẩu Vault
+            # (secret/platform/jenkins) khi Keycloak không truy cập được.
             securityRealm: |-
-              local:
-                allowsSignup: false
-                enableCaptcha: false
-                users:
-                  - id: "${readFile:/vault/secrets/admin-user}"
-                    name: "Jenkins Admin"
-                    password: "${readFile:/vault/secrets/admin-password}"
+              oic:
+                clientId: "jenkins"
+                clientSecret: "${readFile:/vault/secrets/oidc-client-secret}"
+                serverConfiguration:
+                  wellKnown:
+                    wellKnownOpenIDConfigurationUrl: "https://npd-keycloak.co/realms/platform/.well-known/openid-configuration"
+                    scopesOverride: "openid profile email"
+                userNameField: "preferred_username"
+                fullNameFieldName: "name"
+                emailFieldName: "email"
+                groupsFieldName: "groups"
+                logoutFromOpenidProvider: true
+                postLogoutRedirectUrl: "https://npd-jenkins.co/"
+                disableSslVerification: true
+                properties:
+                  - escapeHatch:
+                      username: "${readFile:/vault/secrets/admin-user}"
+                      secret: "${readFile:/vault/secrets/admin-password}"
             configScripts:
               banking-shared-library: |
                 unclassified:

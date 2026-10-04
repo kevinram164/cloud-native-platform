@@ -7,7 +7,8 @@
 #
 # Role                SA (namespace)                                      Đọc
 # jenkins-kaniko      jenkins-kaniko (platform)                           platform/harbor, platform/github (+ cinehome, aiops)
-# jenkins             jenkins (platform)                                  platform/jenkins
+# jenkins             jenkins (platform)                                  platform/jenkins, platform/keycloak-clients
+# keycloak            keycloak (keycloak), keycloak-db-init (postgres)     platform/keycloak
 # rabbitmq            rabbitmq (rabbit)                                   rabbitmq/admin
 # banking-app         auth/account/transfer/notification/api-producer     banking/db, banking/rabbitmq
 #                     (npd-banking)
@@ -55,6 +56,11 @@ EOF
 
 policy jenkins <<'EOF'
 path "secret/data/platform/jenkins" { capabilities = ["read"] }
+path "secret/data/platform/keycloak-clients" { capabilities = ["read"] }
+EOF
+
+policy keycloak <<'EOF'
+path "secret/data/platform/keycloak" { capabilities = ["read"] }
 EOF
 
 policy rabbitmq <<'EOF'
@@ -68,10 +74,11 @@ EOF
 
 role jenkins-kaniko jenkins-kaniko platform jenkins-kaniko
 role jenkins jenkins platform jenkins
+role keycloak keycloak,keycloak-db-init keycloak,postgres keycloak
 role rabbitmq rabbitmq rabbit rabbitmq
 role banking-app "${BANKING_SAS}" "${BANKING_NS}" banking-app
 
 echo "==> Kiểm tra secret đã seed"
-for p in platform/harbor platform/harbor-pull platform/github platform/jenkins rabbitmq/admin banking/db banking/rabbitmq; do
+for p in platform/harbor platform/harbor-pull platform/github platform/jenkins platform/keycloak platform/keycloak-clients rabbitmq/admin banking/db banking/rabbitmq; do
   vexec "vault kv get secret/$p >/dev/null 2>&1" && echo "OK      secret/$p" || echo "MISSING secret/$p"
 done
