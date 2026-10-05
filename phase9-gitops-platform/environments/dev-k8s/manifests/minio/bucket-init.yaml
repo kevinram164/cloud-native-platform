@@ -34,7 +34,8 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: mc
-          image: docker.io/minio/mc:latest
+          # docker.io/minio/mc đã bị gỡ khỏi Docker Hub (MinIO ngừng phát hành image community)
+          image: docker.io/bitnamilegacy/minio-client:2025.7.21-debian-12-r3
           env:
             - name: HOME
               value: /tmp
