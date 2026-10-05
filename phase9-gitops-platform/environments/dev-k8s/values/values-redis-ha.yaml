@@ -60,6 +60,9 @@ metrics:
   image:
     registry: docker.io
     repository: bitnamilegacy/redis-exporter
+  # Độ dài hàng đợi job → redis_key_size{key="cinehome:media:jobs"} (list LPUSH/BRPOP của CineHome)
+  extraArgs:
+    check-single-keys: "db0=cinehome:media:jobs"
   resources:
     requests:
       memory: "32Mi"

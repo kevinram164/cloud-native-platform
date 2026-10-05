@@ -171,6 +171,47 @@ spec:
       path: /metrics
       interval: 60s
 ---
+# OTel Collector spanmetrics (:8889): RED metrics sinh từ trace của mọi app gửi OTLP (movie-api, media-worker…).
+# honorLabels: giữ job/instance do exporter đặt (service.name / service.instance.id), không ghi đè bằng target collector.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: otel-spanmetrics
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [observability]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opentelemetry-collector
+      app.kubernetes.io/instance: opentelemetry-collector
+  endpoints:
+    - port: spanmetrics
+      path: /metrics
+      interval: 30s
+      honorLabels: true
+---
+# CineHome Cloudflare Tunnel (cloudflared --metrics 0.0.0.0:2000): traffic public cinehome.automationecom.click
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: cinehome-cloudflared
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [npd-movie]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cloudflared
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
 # MinIO: MINIO_PROMETHEUS_AUTH_TYPE=public (values-minio.yaml) → không cần bearer token
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

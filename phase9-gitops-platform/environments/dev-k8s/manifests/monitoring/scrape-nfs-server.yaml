@@ -1,0 +1,19 @@
+# NFS server 10.100.1.180 (ngoài cụm) — node_exporter :9100 do scripts/nfs-node-exporter-install.sh cài.
+# Disk thật của MinIO/Postgres/Prometheus nằm ở đây, node-exporter trên worker không thấy.
+# Series: job="nfs-server" → node_disk_*, node_filesystem_*, node_nfsd_* (dashboard NPD CineHome, alert NfsServer*).
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: nfs-server
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  scrapeInterval: 30s
+  staticConfigs:
+    - targets: ["10.100.1.180:9100"]
+      labels:
+        node_role: nfs-server
+  relabelings:
+    - targetLabel: job
+      replacement: nfs-server

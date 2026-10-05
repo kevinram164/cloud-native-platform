@@ -2,6 +2,9 @@
 # Chart: open-telemetry/opentelemetry-collector
 # App gửi OTLP tới opentelemetry-collector.observability:4317 (gRPC) / :4318 (HTTP).
 # APM Server (ECK, manifests/elastic/apm-server.yaml) nhận OTLP gRPC native trên :8200.
+# spanmetrics: sinh RED metrics từ trace (traces_span_metrics_calls_total, ..._duration_milliseconds_bucket)
+# → :8889/metrics → ServiceMonitor otel-spanmetrics (manifests/monitoring) → Grafana. App không cần /metrics.
+# Metrics OTLP do app tự ghi (pipeline metrics) cũng ra cùng :8889.
 
 fullnameOverride: opentelemetry-collector
 mode: deployment
@@ -61,7 +64,26 @@ config:
         - key: deployment.environment
           value: dev-k8s
           action: insert
+  connectors:
+    spanmetrics:
+      histogram:
+        explicit:
+          buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2500ms, 5s, 10s, 30s, 60s, 300s, 900s]
+      # semconv cũ (instrumentation 0.48b0) + mới
+      dimensions:
+        - name: http.method
+        - name: http.status_code
+        - name: http.request.method
+        - name: http.response.status_code
+      # Không nhóm theo pod uid/IP → series không nhân lên mỗi lần rollout
+      resource_metrics_key_attributes: [service.name, service.namespace]
+      metrics_flush_interval: 15s
+      metrics_expiration: 10m
   exporters:
+    prometheus:
+      endpoint: ${env:MY_POD_IP}:8889
+      resource_to_telemetry_conversion:
+        enabled: false
     otlp/apm:
       endpoint: apm-apm-http.observability.svc.cluster.local:8200
       tls:
@@ -80,11 +102,15 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlp/apm]
+        exporters: [otlp/apm, spanmetrics]
+      metrics/spanmetrics:
+        receivers: [spanmetrics]
+        exporters: [prometheus]
+      # Metrics OTLP của app (vd. cinehome_playback_* từ movie-api) → APM + Prometheus
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlp/apm]
+        exporters: [otlp/apm, prometheus]
       logs:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
@@ -97,6 +123,13 @@ resources:
   limits:
     cpu: 500m
     memory: 512Mi
+
+ports:
+  spanmetrics:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
 
 service:
   type: ClusterIP

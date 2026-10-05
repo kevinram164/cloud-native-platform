@@ -1,4 +1,4 @@
-# Alert ứng dụng (team banking/shop) → Alertmanager route nhanh (group_wait 10s, repeat 30m).
+# Alert ứng dụng (team banking/shop/movie) → Alertmanager route nhanh (group_wait 10s, repeat 30m).
 # Triệu chứng chính = 503/5xx (consumer down); kube rule chỉ báo khi desired>0 (không nhầm với scale=0).
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -104,3 +104,180 @@ spec:
           annotations:
             summary: "Shop pod restarting"
             description: "Pod {{ $labels.pod }} restarted >3 times in 15m."
+---
+# CineHome (npd-movie). Không có /metrics trong app:
+#   - traffic public: cloudflared_tunnel_* (PodMonitor cinehome-cloudflared)
+#   - movie-api / media-worker: traces_span_metrics_* (OTel spanmetrics, label service_name)
+#   - hàng đợi transcode: redis_key_size{key="cinehome:media:jobs"}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-movie-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: movie.symptoms
+      rules:
+        - alert: MovieSiteUnreachable
+          expr: |
+            (sum(cloudflared_tunnel_ha_connections{namespace="npd-movie"}) or vector(0)) < 1
+          for: 2m
+          labels:
+            severity: critical
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "cinehome.automationecom.click mất kết nối Cloudflare Tunnel"
+            description: >-
+              Không còn connection nào từ cloudflared tới Cloudflare trong 2m → người dùng nhận lỗi 1033.
+              Kiểm tra: kubectl -n npd-movie logs deploy/cloudflared; token Vault secret/cinehome/cloudflared; egress 7844.
+
+        - alert: MovieTunnelErrors
+          expr: |
+            sum(rate(cloudflared_tunnel_request_errors{namespace="npd-movie"}[5m]))
+              / sum(rate(cloudflared_tunnel_total_requests{namespace="npd-movie"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "Tunnel CineHome lỗi {{ $value | humanizePercentage }} request"
+            description: "cloudflared không gọi được origin movie-web:8080 (pod down/timeout). Cloudflare trả 502 cho người dùng."
+
+        - alert: MovieApi5xx
+          expr: |
+            sum(rate(traces_span_metrics_calls_total{service_name="movie-api", span_kind="SPAN_KIND_SERVER", http_status_code=~"5.."}[5m]))
+              / sum(rate(traces_span_metrics_calls_total{service_name="movie-api", span_kind="SPAN_KIND_SERVER"}[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "movie-api trả 5xx {{ $value | humanizePercentage }}"
+            description: "Tỷ lệ 5xx > 5% trong 5m. Xem trace lỗi: Kibana → APM → movie-api → Errors; log logs-movie-*."
+
+        - alert: MovieApiSlow
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name="movie-api", span_kind="SPAN_KIND_SERVER", span_name!~".*upload.*"}[5m]))
+            ) > 2000
+          for: 10m
+          labels:
+            severity: warning
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "movie-api p95 {{ $value | humanize }}ms (> 2s)"
+            description: "Trang chủ/danh sách phim chậm. Kiểm tra span DB/Redis trong APM (Transactions → span breakdown)."
+
+        - alert: MovieMediaQueueBacklog
+          expr: |
+            max(redis_key_size{key="cinehome:media:jobs"}) > 10
+          for: 30m
+          labels:
+            severity: warning
+            team: movie
+            namespace: npd-movie
+          annotations:
+            summary: "Hàng đợi transcode tồn {{ $value }} job > 30m"
+            description: "media-worker không kịp xử lý hoặc đang down. Kiểm tra kubectl -n npd-movie logs deploy/media-worker."
+
+    # QoE đo trong trình duyệt (hls.js) → movie-api POST /api/playback/events → cinehome_playback_* / cinehome_segment_*
+    # Chuỗi nguyên nhân: Rebuffer ↑ → Segment download ↑ → MinIO GET TTFB ↑ → NFS READ latency ↑ → NFS disk saturation
+    - name: movie.qoe
+      rules:
+        - alert: MovieRebufferHigh
+          expr: |
+            sum(rate(cinehome_playback_rebuffer_seconds_total[10m]))
+              / sum(rate(cinehome_playback_watch_seconds_total[10m])) > 0.02
+            and sum(rate(cinehome_playback_watch_seconds_total[10m])) > 0
+          for: 10m
+          labels:
+            severity: warning
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "Người xem bị buffer {{ $value | humanizePercentage }} thời gian xem"
+            description: >-
+              Rebuffer ratio > 2%. Lần theo dashboard NPD CineHome: Segment download → MinIO GET TTFB → NFS READ latency → NFS disk.
+
+        - alert: MovieStartupSlow
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(cinehome_playback_startup_seconds_bucket[15m]))) > 3
+          for: 10m
+          labels:
+            severity: warning
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "Video startup p95 {{ $value | humanizeDuration }} (> 3s)"
+            description: "Từ lúc bấm play đến khung hình đầu. Kiểm tra /stream (movie-api) và segment đầu (MinIO)."
+
+        - alert: MoviePlaybackFailures
+          expr: |
+            sum(increase(cinehome_playback_sessions_total{result="failed"}[15m]))
+              / sum(increase(cinehome_playback_sessions_total{result=~"success|failed"}[15m])) > 0.05
+            and sum(increase(cinehome_playback_sessions_total[15m])) >= 5
+          for: 5m
+          labels:
+            severity: critical
+            team: movie
+            tier: symptom
+            namespace: npd-movie
+          annotations:
+            summary: "{{ $value | humanizePercentage }} phiên xem phát lỗi"
+            description: >-
+              Playback success < 95%. Lỗi theo label error (fragLoadError, manifestLoadError, media_4…):
+              sum by (error) (increase(cinehome_playback_sessions_total{result="failed"}[15m])).
+
+        - alert: MovieSegmentSlow
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(cinehome_segment_load_seconds_bucket[10m]))) > 3
+          for: 10m
+          labels:
+            severity: warning
+            team: movie
+            tier: cause
+            namespace: npd-movie
+          annotations:
+            summary: "Tải segment HLS p95 {{ $value | humanizeDuration }} (segment dài 6s)"
+            description: "Gần bằng độ dài segment thì buffer cạn. So với MinIO GET TTFB và băng thông tunnel."
+
+    - name: movie.kube
+      rules:
+        - alert: MovieDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{namespace="npd-movie"} > 0
+            and
+            kube_deployment_spec_replicas{namespace="npd-movie"} > 0
+          for: 5m
+          labels:
+            severity: warning
+            team: movie
+            tier: infra
+            namespace: npd-movie
+          annotations:
+            summary: "CineHome {{ $labels.deployment }} unavailable"
+            description: "desired>0 nhưng unavailable>0 trong 5m (crash/probe/ImagePull/vault-agent-init)."
+
+        - alert: MoviePodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="npd-movie"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            team: movie
+            namespace: npd-movie
+          annotations:
+            summary: "CineHome pod {{ $labels.pod }} restart liên tục"
+            description: "Container {{ $labels.container }} restart >3 lần/15m. media-worker: kiểm tra OOMKilled khi transcode."

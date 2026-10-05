@@ -291,16 +291,26 @@ Metrics:  ServiceMonitor/PodMonitor ──► Prometheus ──► PrometheusRul
                                            └──► Grafana (dashboard NPD, datasource ES logs + APM)
 Logs:     container stdout ──► Fluent Bit (DaemonSet) ──► Elasticsearch logs-{bank,shop,movie,infra}-YYYY.MM.DD ──► Kibana
 Traces:   app (OTLP) ──► OTel Collector ──► APM Server ──► Elasticsearch traces-apm* ──► Kibana APM
+                              └──► spanmetrics + metrics OTLP của app :8889 ──► Prometheus (vd. CineHome QoE cinehome_playback_*)
+NFS:      node-exporter --collector.mountstats (client) + node_exporter trên 10.100.1.180 (ScrapeConfig nfs-server)
+```
+
+NFS server nằm ngoài cụm nên disk thật của PVC `nfs-csi` chỉ đo được khi cài node_exporter trên đó (một lần):
+
+```bash
+scp phase9-gitops-platform/environments/dev-k8s/scripts/nfs-node-exporter-install.sh sysadmin@10.100.1.180:/tmp/
+ssh sysadmin@10.100.1.180 'sudo bash /tmp/nfs-node-exporter-install.sh'
+# Prometheus: up{job="nfs-server"} == 1
 ```
 
 | Application | Namespace | Nội dung |
 |-------------|-----------|----------|
 | `observability-kube-prometheus-stack` | monitoring | Prometheus (7 ngày, 20Gi), Alertmanager, Grafana (SSO Keycloak), node-exporter, kube-state-metrics |
-| `observability-monitoring-config` | monitoring | `manifests/monitoring`: ServiceMonitor/PodMonitor (banking, shop, postgres, redis, kong, rabbitmq, kafka, minio), PrometheusRule, dashboard, Ingress |
+| `observability-monitoring-config` | monitoring | `manifests/monitoring`: ServiceMonitor/PodMonitor (banking, shop, postgres, redis, kong, rabbitmq, kafka, minio, otel-spanmetrics, cinehome-cloudflared), ScrapeConfig `nfs-server`, PrometheusRule, dashboard, Ingress |
 | `observability-eck-operator` | elastic-system | ECK operator 3.5 |
 | `observability-elastic-stack` | observability | `manifests/elastic`: Elasticsearch 8.19 (1 node, 50Gi), Kibana, APM Server, Job `es-setup`, Ingress Kibana |
 | `observability-fluent-bit` | observability | DaemonSet, đọc `/var/log/containers`, lọc theo namespace |
-| `observability-otel-collector` | observability | OTLP `opentelemetry-collector.observability:4317/4318` → APM Server |
+| `observability-otel-collector` | observability | OTLP `opentelemetry-collector.observability:4317/4318` → APM Server; connector `spanmetrics` → `:8889/metrics` (`traces_span_metrics_*`) |
 
 Prometheus chọn mọi ServiceMonitor/PodMonitor/PrometheusRule trong cụm (không cần label `release`). App ở repo khác cứ tạo ServiceMonitor trong namespace của mình. Dashboard: ConfigMap có label `grafana_dashboard: "1"` ở bất kỳ namespace nào (annotation `grafana_folder` để chọn folder).
 

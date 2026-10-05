@@ -7,6 +7,7 @@ namespace: monitoring
 
 resources:
   - servicemonitors.yaml
+  - scrape-nfs-server.yaml
   - rules-apps.yaml
   - rules-infra.yaml
   - rules-platform.yaml
@@ -35,6 +36,9 @@ configMapGenerator:
     options: *dashboard
   - name: dashboard-npd-rabbitmq
     files: [dashboards/npd-rabbitmq.json]
+    options: *dashboard
+  - name: dashboard-npd-movie
+    files: [dashboards/npd-movie.json]
     options: *dashboard
   # Script báo cáo Telegram 8h/15h/22h (digest/cronjob.yaml)
   - name: npd-status-digest-script

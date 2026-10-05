@@ -149,3 +149,90 @@ spec:
           annotations:
             summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} còn < 15%"
             description: "Dung lượng trống {{ $value | humanizePercentage }}. NFS subdir: số liệu theo quota PVC."
+
+    # MinIO S3 (endpoint /minio/v2/metrics/cluster). ttfb_seconds_distribution là histogram tích luỹ có label le (không có hậu tố _bucket).
+    - name: infra.minio-s3
+      rules:
+        - alert: MinioGetSlow
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(minio_s3_requests_ttfb_seconds_distribution{api="getobject"}[10m]))) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "MinIO GET TTFB p95 {{ $value | humanizeDuration }} (> 500ms)"
+            description: "Segment HLS trả chậm → người xem buffer. Kiểm tra NFS READ latency (mountstats) và disk NFS server."
+
+        - alert: MinioS3Errors
+          expr: |
+            sum(rate(minio_s3_requests_5xx_errors_total[5m])) / sum(rate(minio_s3_requests_total[5m])) > 0.01
+          for: 5m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "MinIO 5xx {{ $value | humanizePercentage }} request S3"
+            description: "Lỗi phía MinIO (disk/NFS). Log: kubectl -n minio logs deploy/minio."
+
+    # NFS 10.100.1.180: client = mountstats trên worker (node-exporter), server = node_exporter job nfs-server.
+    - name: infra.nfs
+      rules:
+        - alert: NfsServerDown
+          expr: |
+            up{job="nfs-server"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            team: infra
+          annotations:
+            summary: "node_exporter NFS server {{ $labels.instance }} không scrape được"
+            description: "Server NFS sập hoặc node_exporter dừng/firewall :9100. Mọi PVC nfs-csi phụ thuộc server này."
+
+        - alert: NfsClientReadSlow
+          expr: |
+            sum by (instance) (rate(node_mountstats_nfs_operations_request_time_seconds_total{operation="READ"}[5m]))
+              / sum by (instance) (rate(node_mountstats_nfs_operations_requests_total{operation="READ"}[5m])) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "NFS READ trung bình {{ $value | humanizeDuration }} trên {{ $labels.instance }}"
+            description: "Độ trễ đọc NFS phía client > 50ms (mạng hoặc disk server). So với NfsServerDiskReadSlow để khoanh vùng."
+
+        - alert: NfsServerDiskReadSlow
+          expr: |
+            rate(node_disk_read_time_seconds_total{job="nfs-server"}[5m])
+              / rate(node_disk_reads_completed_total{job="nfs-server"}[5m]) > 0.03
+            and rate(node_disk_reads_completed_total{job="nfs-server"}[5m]) > 1
+          for: 10m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "Disk {{ $labels.device }} NFS server đọc {{ $value | humanizeDuration }}/IO"
+            description: "Read latency > 30ms. Nếu NFS client chậm mà disk nhanh → nghẽn mạng/nfsd threads."
+
+        - alert: NfsServerDiskSaturated
+          expr: |
+            rate(node_disk_io_time_seconds_total{job="nfs-server"}[5m]) > 0.9
+          for: 15m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "Disk {{ $labels.device }} NFS server bận {{ $value | humanizePercentage }}"
+            description: "I/O utilization > 90% trong 15m — disk bão hoà, mọi PVC nfs-csi chậm."
+
+        - alert: NfsServerFilesystemFilling
+          expr: |
+            node_filesystem_avail_bytes{job="nfs-server", fstype!~"tmpfs|overlay"}
+              / node_filesystem_size_bytes{job="nfs-server", fstype!~"tmpfs|overlay"} < 0.15
+          for: 15m
+          labels:
+            severity: warning
+            team: infra
+          annotations:
+            summary: "NFS server {{ $labels.mountpoint }} còn {{ $value | humanizePercentage }}"
+            description: "Dung lượng thật của export (quota PVC nfs-csi không giới hạn được disk server)."
