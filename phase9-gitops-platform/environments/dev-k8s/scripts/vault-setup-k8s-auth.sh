@@ -17,6 +17,9 @@
 # alertmanager        kube-prometheus-stack-alertmanager,                 platform/alertmanager-telegram
 #                     npd-status-digest (monitoring)
 # elastic-setup       es-setup (observability)                            platform/elastic
+# cinehome-app        movie-api, media-worker (npd-movie)                 cinehome/app
+# cinehome-db-init    movie-db-init (postgres)                            cinehome/movie-db
+# cinehome-cloudflared cloudflared (npd-movie)                            cinehome/cloudflared
 set -euo pipefail
 
 : "${VAULT_TOKEN:?export VAULT_TOKEN trước khi chạy}"
@@ -95,6 +98,18 @@ policy elastic-setup <<'EOF'
 path "secret/data/platform/elastic" { capabilities = ["read"] }
 EOF
 
+policy cinehome-app <<'EOF'
+path "secret/data/cinehome/app" { capabilities = ["read"] }
+EOF
+
+policy cinehome-db-init <<'EOF'
+path "secret/data/cinehome/movie-db" { capabilities = ["read"] }
+EOF
+
+policy cinehome-cloudflared <<'EOF'
+path "secret/data/cinehome/cloudflared" { capabilities = ["read"] }
+EOF
+
 role jenkins-kaniko jenkins-kaniko platform jenkins-kaniko
 role jenkins jenkins platform jenkins
 role keycloak keycloak,keycloak-db-init keycloak,postgres keycloak
@@ -104,10 +119,14 @@ role minio minio,minio-bucket-init minio minio
 role grafana kube-prometheus-stack-grafana monitoring grafana
 role alertmanager kube-prometheus-stack-alertmanager,npd-status-digest monitoring alertmanager
 role elastic-setup es-setup observability elastic-setup
+role cinehome-app movie-api,media-worker npd-movie cinehome-app
+role cinehome-db-init movie-db-init postgres cinehome-db-init
+role cinehome-cloudflared cloudflared npd-movie cinehome-cloudflared
 
 echo "==> Kiểm tra secret đã seed"
 for p in platform/harbor platform/harbor-pull platform/github platform/jenkins platform/keycloak platform/keycloak-clients \
          platform/minio platform/grafana platform/alertmanager-telegram platform/elastic \
-         rabbitmq/admin banking/db banking/rabbitmq; do
+         rabbitmq/admin banking/db banking/rabbitmq \
+         cinehome/harbor cinehome/harbor-pull cinehome/app cinehome/movie-db cinehome/cloudflared; do
   vexec "vault kv get secret/$p >/dev/null 2>&1" && echo "OK      secret/$p" || echo "MISSING secret/$p"
 done

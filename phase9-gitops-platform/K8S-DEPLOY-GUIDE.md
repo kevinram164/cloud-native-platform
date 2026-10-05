@@ -43,6 +43,7 @@ DNS (hoặc `hosts` trên máy client) trỏ các tên sau về `10.100.1.100`:
 | `npd-alertmanager.co` | `monitoring/kube-prometheus-stack-alertmanager:9093` | platform |
 | `npd-kibana.co` | `observability/kb-kb-http:5601` | platform |
 | `npd-banking.co` | Ingress `npd-banking` (frontend + Kong) | banking-demo |
+| `npd-movie.co` | `npd-movie/movie-web:8080` (public: `cinehome.automationecom.click` qua Cloudflare Tunnel) | movie-web |
 
 NGINX Plus trên f5-lb cần upstream `10.100.1.46:80` cho các server name trên, kèm `proxy_set_header Host $host` và `X-Forwarded-Proto https`. Với Harbor, đặt `client_max_body_size 0`. Mỗi domain có một file trong `environments/dev-k8s/f5-lb/conf.d/`; cert `/etc/nginx/certs/tls.crt` phải có SAN cho domain mới (hoặc wildcard).
 
@@ -52,6 +53,7 @@ NGINX Plus trên f5-lb cần upstream `10.100.1.46:80` cho các server name trê
 |------|-------|------------|----------|
 | `cloud-native-platform` | `main` | `platform` | `environments/dev-k8s/argocd/applications/{platform,infra,observability}` |
 | `banking-demo` | `dev-k8s` | `banking` | `deploy/dev-k8s/argocd` (9 app), chart `phase2-helm-chart/banking-demo`, `deploy/dev-k8s/values/values-images.yaml` |
+| `movie-web` | `main` | `cinehome` | `deploy/dev-k8s/argocd` (4 app), chart `charts/movie`, `deploy/dev-k8s/values/values-images.yaml` |
 
 Các Application của `dev-k8s` nằm riêng, không dùng `gitops-platform/applications/*` (bản OpenShift cũ, chỉ giữ để tham khảo).
 
@@ -377,6 +379,20 @@ kubectl apply -f deploy/dev-k8s/argocd/app-of-apps.yaml
 ```
 
 Chi tiết: `banking-demo/deploy/dev-k8s/README.md`.
+
+### CineHome (repo `movie-web`)
+
+Điều kiện: infra Healthy (Postgres, Redis, MinIO + bucket `movies`/`posters`), Vault đã seed `cinehome/{app,movie-db,cloudflared,harbor,harbor-pull}` và chạy lại `vault-setup-k8s-auth.sh` (role `cinehome-app`, `cinehome-db-init`, `cinehome-cloudflared`), Secret `harbor-pull-creds` trong `npd-movie`.
+
+```bash
+VAULT_TOKEN=<token> VAULT_PATH=secret/cinehome/harbor-pull NAMESPACES=npd-movie \
+  bash phase9-gitops-platform/environments/dev-k8s/scripts/create-harbor-pull-secret.sh
+cd movie-web      # nhánh main
+kubectl apply -f deploy/dev-k8s/argocd/appproject.yaml
+kubectl apply -f deploy/dev-k8s/argocd/app-of-apps.yaml
+```
+
+Public `cinehome.automationecom.click` đi qua Cloudflare Tunnel (`cloudflared` trong `npd-movie`, token từ Vault). Tắt connector trên OCP trước khi bật trên dev-k8s. Chi tiết: `movie-web/deploy/dev-k8s/README.md`.
 
 ## 10. Kiểm tra
 
