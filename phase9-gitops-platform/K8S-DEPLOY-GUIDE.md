@@ -316,6 +316,13 @@ kubectl -n monitoring exec alertmanager-kube-prometheus-stack-alertmanager-0 -c 
 
 Không nhận được tin: `kubectl -n monitoring logs alertmanager-kube-prometheus-stack-alertmanager-0 -c alertmanager | grep -i telegram` (token sai → 401, bot chưa ở trong group → 400 chat not found).
 
+Báo cáo định kỳ 08:00, 15:00, 22:00 (CronJob `npd-status-digest`, `manifests/monitoring/digest/`): node, CPU/RAM/disk max, pod, API server, alert đang bắn. Chạy thử:
+
+```bash
+kubectl -n monitoring create job --from=cronjob/npd-status-digest digest-test
+kubectl -n monitoring logs -f job/digest-test -c digest
+```
+
 ### Kibana
 
 Đăng nhập `https://npd-kibana.co` bằng user `elastic` (Basic license không có SSO):

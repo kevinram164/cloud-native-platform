@@ -14,7 +14,8 @@
 #                     (npd-banking)
 # minio               minio, minio-bucket-init (minio)                    platform/minio
 # grafana             kube-prometheus-stack-grafana (monitoring)          platform/grafana, platform/keycloak-clients, platform/elastic
-# alertmanager        kube-prometheus-stack-alertmanager (monitoring)     platform/alertmanager-telegram
+# alertmanager        kube-prometheus-stack-alertmanager,                 platform/alertmanager-telegram
+#                     npd-status-digest (monitoring)
 # elastic-setup       es-setup (observability)                            platform/elastic
 set -euo pipefail
 
@@ -101,7 +102,7 @@ role rabbitmq rabbitmq rabbit rabbitmq
 role banking-app "${BANKING_SAS}" "${BANKING_NS}" banking-app
 role minio minio,minio-bucket-init minio minio
 role grafana kube-prometheus-stack-grafana monitoring grafana
-role alertmanager kube-prometheus-stack-alertmanager monitoring alertmanager
+role alertmanager kube-prometheus-stack-alertmanager,npd-status-digest monitoring alertmanager
 role elastic-setup es-setup observability elastic-setup
 
 echo "==> Kiểm tra secret đã seed"
