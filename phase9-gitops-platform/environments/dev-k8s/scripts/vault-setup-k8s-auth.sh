@@ -14,8 +14,8 @@
 #                     (npd-banking)
 # minio               minio, minio-bucket-init (minio)                    platform/minio
 # grafana             kube-prometheus-stack-grafana (monitoring)          platform/grafana, platform/keycloak-clients, platform/elastic
-# alertmanager        kube-prometheus-stack-alertmanager,                 platform/alertmanager-telegram
-#                     npd-status-digest (monitoring)
+# alertmanager        kube-prometheus-stack-alertmanager,                 platform/alertmanager-telegram,
+#                     npd-status-digest (monitoring)                      platform/alertmanager-aiops
 # elastic-setup       es-setup (observability)                            platform/elastic
 # cinehome-app        movie-api, media-worker (npd-movie)                 cinehome/app
 # cinehome-db-init    movie-db-init (postgres)                            cinehome/movie-db
@@ -92,6 +92,7 @@ EOF
 
 policy alertmanager <<'EOF'
 path "secret/data/platform/alertmanager-telegram" { capabilities = ["read"] }
+path "secret/data/platform/alertmanager-aiops" { capabilities = ["read"] }
 EOF
 
 policy elastic-setup <<'EOF'
@@ -125,7 +126,7 @@ role cinehome-cloudflared cloudflared npd-movie cinehome-cloudflared
 
 echo "==> Kiểm tra secret đã seed"
 for p in platform/harbor platform/harbor-pull platform/github platform/jenkins platform/keycloak platform/keycloak-clients \
-         platform/minio platform/grafana platform/alertmanager-telegram platform/elastic \
+         platform/minio platform/grafana platform/alertmanager-telegram platform/alertmanager-aiops platform/elastic \
          rabbitmq/admin banking/db banking/rabbitmq \
          cinehome/harbor cinehome/harbor-pull cinehome/app cinehome/movie-db cinehome/cloudflared; do
   vexec "vault kv get secret/$p >/dev/null 2>&1" && echo "OK      secret/$p" || echo "MISSING secret/$p"

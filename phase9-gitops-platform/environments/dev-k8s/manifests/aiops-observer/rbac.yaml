@@ -1,0 +1,58 @@
+# Kubernetes Observer prerequisites for IBM Concert Operate (TechZone).
+# Apply on the home cluster, then create a long-lived token for the Load job.
+#
+#   kubectl apply -f phase9-gitops-platform/environments/dev-k8s/manifests/aiops-observer/rbac.yaml
+#   kubectl get secret asm-k8s-account-secret -n default -o jsonpath='{.data.token}' | base64 -d; echo
+#
+# PDF Concert Operate: get/list for Load; watch for Listen.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: asm:kubernetes-observer
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - namespaces
+      - nodes
+      - services
+      - endpoints
+      - persistentvolumes
+      - persistentvolumeclaims
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources:
+      - replicasets
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs: [get, list, watch]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: asm-k8s-account
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: asm-k8s
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: asm:kubernetes-observer
+subjects:
+  - kind: ServiceAccount
+    name: asm-k8s-account
+    namespace: default
+---
+# Long-lived token (kubeadm 1.24+). Prefer this over `kubectl create token` for scheduled Load jobs.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: asm-k8s-account-secret
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: asm-k8s-account
+type: kubernetes.io/service-account-token

@@ -175,7 +175,7 @@ Các pod dùng `agent-pre-populate-only: "true"`: chỉ có init container, khô
 | Banking services | `auth-service`, `account-service`, `transfer-service`, `notification-service`, `api-producer` (npd-banking) | `banking-app` | `banking/db` {`DATABASE_URL`, `REDIS_URL`}, `banking/rabbitmq` {`RABBITMQ_URL`} | `. /vault/secrets/env` |
 | MinIO + Job tạo bucket | `minio`, `minio-bucket-init` (minio) | `minio` | `platform/minio` {`root_user`, `root_password`} | `MINIO_ROOT_*_FILE=/opt/bitnami/minio/secrets/*`; Job `. /vault/secrets/root` |
 | Grafana | `kube-prometheus-stack-grafana` (monitoring) | `grafana` | `platform/grafana` {`admin_password`}, `platform/keycloak-clients` {`grafana`}, `platform/elastic` {`grafana_password`} | `GF_SECURITY_ADMIN_PASSWORD__FILE`, `$__file{/vault/secrets/*}` trong grafana.ini / datasource |
-| Alertmanager | `kube-prometheus-stack-alertmanager` (monitoring) | `alertmanager` | `platform/alertmanager-telegram` {`bot_token`} | `telegram_configs.bot_token_file` |
+| Alertmanager | `kube-prometheus-stack-alertmanager` (monitoring) | `alertmanager` | `platform/alertmanager-telegram` {`bot_token`}, `platform/alertmanager-aiops` {`url`,`username`,`password`} (Concert Operate webhook) | `telegram_configs.bot_token_file`; webhook `url_file` + basic_auth `*_file` |
 | Job `es-setup` | `es-setup` (observability) | `elastic-setup` | `platform/elastic` {`grafana_password`} | Tạo user ES `grafana` (Grafana datasource) |
 
 ### Init, unseal, seed
@@ -201,6 +201,8 @@ v kv put secret/banking/rabbitmq RABBITMQ_URL='amqp://banking:<pass>@rabbitmq.ra
 v kv put secret/platform/minio root_user=minioadmin root_password='<pass cũ>'
 v kv put secret/platform/grafana admin_password='<pass>'
 v kv put secret/platform/alertmanager-telegram bot_token='<token BotFather>'
+# Concert Operate Generic Webhook (TechZone) — seed TRƯỚC khi sync values Alertmanager có inject aiops
+# v kv put secret/platform/alertmanager-aiops url='https://webhook-connector-.../webhook-connector/...' username='...' password='...'
 v kv put secret/platform/elastic grafana_password='<pass>'
 # platform/keycloak-clients (argocd, jenkins, harbor, grafana) do keycloak-sso-setup.sh ghi (mục 6)
 ```

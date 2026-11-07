@@ -1,11 +1,12 @@
 # kube-prometheus-stack — dev-k8s (ns monitoring)
 #   Grafana      https://npd-grafana.co      (SSO Keycloak, group platform-admin → Admin)
 #   Prometheus   https://npd-prometheus.co   (không auth — chỉ dùng nội bộ)
-#   Alertmanager https://npd-alertmanager.co (không auth) → Telegram
+#   Alertmanager https://npd-alertmanager.co (không auth) → Telegram (+ AIOps webhook, tùy chọn)
 # Secret qua Vault Agent Injector (không tạo Secret K8s):
 #   grafana      ← secret/platform/grafana {admin_password}, platform/keycloak-clients {grafana},
 #                  platform/elastic {grafana_password}
 #   alertmanager ← secret/platform/alertmanager-telegram {bot_token}
+#                  secret/platform/alertmanager-aiops {url, username, password}  # Concert Operate Generic Webhook
 # ServiceMonitor/PodMonitor/PrometheusRule/dashboard: manifests/monitoring (app observability-monitoring-config).
 
 fullnameOverride: kube-prometheus-stack
@@ -87,6 +88,22 @@ alertmanager:
           {{- with secret "secret/data/platform/alertmanager-telegram" -}}
           {{- .Data.data.bot_token -}}
           {{- end -}}
+        # Concert Operate Generic Webhook (TechZone). Seed secret rồi restart StatefulSet.
+        vault.hashicorp.com/agent-inject-secret-aiops-webhook-url: "secret/data/platform/alertmanager-aiops"
+        vault.hashicorp.com/agent-inject-template-aiops-webhook-url: |-
+          {{- with secret "secret/data/platform/alertmanager-aiops" -}}
+          {{- .Data.data.url -}}
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-secret-aiops-webhook-username: "secret/data/platform/alertmanager-aiops"
+        vault.hashicorp.com/agent-inject-template-aiops-webhook-username: |-
+          {{- with secret "secret/data/platform/alertmanager-aiops" -}}
+          {{- .Data.data.username -}}
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-secret-aiops-webhook-password: "secret/data/platform/alertmanager-aiops"
+        vault.hashicorp.com/agent-inject-template-aiops-webhook-password: |-
+          {{- with secret "secret/data/platform/alertmanager-aiops" -}}
+          {{- .Data.data.password -}}
+          {{- end -}}
     resources:
       requests:
         cpu: 20m
@@ -118,6 +135,9 @@ alertmanager:
           matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
         - receiver: "null"
           matchers: ['severity =~ "none|info"']
+        # Concert Operate (TechZone): mọi alert còn lại cũng đẩy webhook; continue để vẫn Telegram
+        - receiver: aiops
+          continue: true
         # Ứng dụng: báo nhanh, nhắc lại 30 phút
         - receiver: telegram
           matchers: ['team =~ "banking|shop|movie"']
@@ -137,6 +157,16 @@ alertmanager:
         equal: [namespace]
     receivers:
       - name: "null"
+      - name: aiops
+        webhook_configs:
+          - url_file: /vault/secrets/aiops-webhook-url
+            send_resolved: true
+            http_config:
+              basic_auth:
+                username_file: /vault/secrets/aiops-webhook-username
+                password_file: /vault/secrets/aiops-webhook-password
+              tls_config:
+                insecure_skip_verify: true
       - name: telegram
         telegram_configs:
           - bot_token_file: /vault/secrets/telegram-bot-token

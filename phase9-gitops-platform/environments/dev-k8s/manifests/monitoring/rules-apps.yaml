@@ -129,6 +129,8 @@ spec:
             team: movie
             tier: symptom
             namespace: npd-movie
+            # AIOps Generic Webhook JSONata → resource.name = cloudflared/npd-movie (khớp topology)
+            deployment: cloudflared
           annotations:
             summary: "cinehome.automationecom.click mất kết nối Cloudflare Tunnel"
             description: >-
