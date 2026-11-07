@@ -89,15 +89,17 @@ alertmanager:
           {{- .Data.data.bot_token -}}
           {{- end -}}
         # Concert Operate Generic Webhook (TechZone).
-        # prometheus-operator (chart 81.x) không parse basic_auth.username_file → nhúng user:pass vào URL.
+        # Operator không hỗ trợ username_file → URL trần + username cố định + password_file.
+        # trimSpace bắt buộc: newline cuối file → AM lỗi "invalid control character in URL".
         vault.hashicorp.com/agent-inject-secret-aiops-webhook-url: "secret/data/platform/alertmanager-aiops"
         vault.hashicorp.com/agent-inject-template-aiops-webhook-url: |-
           {{- with secret "secret/data/platform/alertmanager-aiops" -}}
-          {{- $raw := .Data.data.url -}}
-          {{- $user := .Data.data.username | urlquery -}}
-          {{- $pass := .Data.data.password | urlquery -}}
-          {{- $rest := $raw | trimPrefix "https://" | trimPrefix "http://" -}}
-          https://{{ $user }}:{{ $pass }}@{{ $rest }}
+          {{- .Data.data.url | trimSpace -}}
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-secret-aiops-webhook-password: "secret/data/platform/alertmanager-aiops"
+        vault.hashicorp.com/agent-inject-template-aiops-webhook-password: |-
+          {{- with secret "secret/data/platform/alertmanager-aiops" -}}
+          {{- .Data.data.password | trimSpace -}}
           {{- end -}}
     resources:
       requests:
@@ -154,10 +156,13 @@ alertmanager:
       - name: "null"
       - name: aiops
         webhook_configs:
-          # Auth nằm trong URL (Vault template urlquery) — tránh username_file không hỗ trợ bởi operator
+          # username phải khớp Vault secret/platform/alertmanager-aiops.username (lab: admin)
           - url_file: /vault/secrets/aiops-webhook-url
             send_resolved: true
             http_config:
+              basic_auth:
+                username: admin
+                password_file: /vault/secrets/aiops-webhook-password
               tls_config:
                 insecure_skip_verify: true
       - name: telegram
