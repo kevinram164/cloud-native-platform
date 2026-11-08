@@ -1,7 +1,7 @@
-# Fluent Bit (DaemonSet) → Elasticsearch ECK — tách index logs-bank / logs-shop / logs-movie / logs-infra
+# Fluent Bit (DaemonSet) → Elasticsearch ECK — logs-bank/shop/movie/infra + logs-system (kube-system)
 # Chart: fluent/fluent-bit. Port từ phase9-gitops-platform/logging/values-fluent-bit.yaml (OpenSearch/OCP).
 # Index template + ILM 7 ngày + replicas 0: Job es-setup (manifests/elastic/es-setup.yaml).
-# Thêm namespace: sửa regex grep allowlist + rewrite_tag logs.infra bên dưới.
+# Thêm namespace: sửa regex grep allowlist + rewrite_tag bên dưới.
 
 kind: DaemonSet
 
@@ -26,10 +26,10 @@ testFramework:
 resources:
   requests:
     cpu: 50m
-    memory: 64Mi
+    memory: 128Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: "1"
+    memory: 1Gi
 
 # Chạy cả trên master (log control-plane không thu nhưng pod platform có thể nằm đó)
 tolerations:
@@ -76,10 +76,10 @@ config:
     [INPUT]
         Name              tail
         Path              /var/log/containers/*.log
-        Exclude_Path      *_fluent-bit-*.log,*_kube-system_*.log
+        Exclude_Path      *_fluent-bit-*.log
         multiline.parser  cri
         Tag               kube.*
-        Mem_Buf_Limit     32MB
+        Mem_Buf_Limit     64MB
         Skip_Long_Lines   On
         Refresh_Interval  5
         DB                /var/lib/fluent-bit/flb_kube.db
@@ -99,7 +99,7 @@ config:
     [FILTER]
         Name    grep
         Match   kube.*
-        Regex   $kubernetes['namespace_name'] ^(npd-banking|npd-shop|npd-movie|kafka|platform|observability|monitoring|argocd|kong|vault|keycloak|postgres|redis|rabbit|minio)$
+        Regex   $kubernetes['namespace_name'] ^(npd-banking|npd-shop|npd-movie|kafka|platform|observability|monitoring|argocd|kong|vault|keycloak|postgres|redis|rabbit|minio|kube-system)$
 
     [FILTER]
         Name    grep
@@ -112,6 +112,7 @@ config:
         Rule          $kubernetes['namespace_name'] ^npd-banking$ logs.bank false
         Rule          $kubernetes['namespace_name'] ^npd-shop$ logs.shop false
         Rule          $kubernetes['namespace_name'] ^npd-movie$ logs.movie false
+        Rule          $kubernetes['namespace_name'] ^kube-system$ logs.system false
         Rule          $kubernetes['namespace_name'] ^(kafka|platform|observability|monitoring|argocd|kong|vault|keycloak|postgres|redis|rabbit|minio)$ logs.infra false
         Emitter_Name  re_emitted
         Emitter_Storage.type memory
@@ -203,6 +204,25 @@ config:
         Suppress_Type_Name On
         Logstash_Format    On
         Logstash_Prefix    logs-infra
+        Logstash_DateFormat %Y.%m.%d
+        Replace_Dots       On
+        Generate_ID        On
+        Write_Operation    index
+        Retry_Limit        5
+        Trace_Error        On
+
+    [OUTPUT]
+        Name               es
+        Match              logs.system
+        Host               es-es-http.observability.svc
+        Port               9200
+        HTTP_User          elastic
+        HTTP_Passwd        ${ELASTIC_PASSWORD}
+        tls                On
+        tls.verify         Off
+        Suppress_Type_Name On
+        Logstash_Format    On
+        Logstash_Prefix    logs-system
         Logstash_DateFormat %Y.%m.%d
         Replace_Dots       On
         Generate_ID        On

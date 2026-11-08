@@ -1,4 +1,4 @@
-# es-setup (idempotent): ILM logs-retention-7d, index template logs-bank/shop/movie/infra (replicas 0),
+# es-setup (idempotent): ILM logs-retention-7d, index template logs-bank/shop/movie/infra/system (replicas 0),
 # replicas 0 cho data stream APM (1 node → green), role grafana_reader + user grafana (Grafana datasource).
 # Chạy mỗi lần sync (hook Sync, wave 0 cùng CR, script tự chờ ES) và hằng ngày 03:00 (CronJob).
 # Mật khẩu: elastic từ Secret ECK es-es-elastic-user; grafana từ Vault secret/platform/elastic (grafana_password).
@@ -22,7 +22,7 @@ data:
     CTX = ssl.create_default_context()
     CTX.check_hostname = False
     CTX.verify_mode = ssl.CERT_NONE
-    LOG_PREFIXES = ["logs-bank", "logs-shop", "logs-movie", "logs-infra"]
+    LOG_PREFIXES = ["logs-bank", "logs-shop", "logs-movie", "logs-infra", "logs-system"]
     APM_PREFIXES = ("traces-apm", "logs-apm", "metrics-apm")
 
 
