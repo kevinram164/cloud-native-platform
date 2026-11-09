@@ -1,0 +1,112 @@
+# AIOps Generic Webhook JSONata → resource.name = <deployment|pod|daemonset>/<namespace>
+# Phủ mọi ns workload + kube-system. Team fast-route: banking|shop|movie|platform|infra.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-aiops-topology
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: aiops.scrape
+      rules:
+        - alert: WorkloadTargetDown
+          expr: |
+            up{
+              namespace=~"npd-banking|npd-movie|npd-shop|postgres|redis|rabbit|kafka|kong|minio|vault|keycloak|platform|argocd|monitoring|observability|elastic-system|haproxy-ingress|concert|kube-system"
+            } == 0
+          for: 3m
+          labels:
+            severity: critical
+            tier: scrape
+            namespace: "{{ $labels.namespace }}"
+            deployment: "{{ with $labels.service }}{{ . }}{{ else }}{{ $labels.job }}{{ end }}"
+            pod: "{{ $labels.pod }}"
+            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ with $labels.service }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} không scrape được"
+            description: >-
+              Target {{ $labels.instance }} (pod {{ $labels.pod }}) up=0 trong 3m.
+              Kiểm tra /metrics, ImagePull, vault-agent-init, NetworkPolicy.
+
+    - name: aiops.kube
+      rules:
+        - alert: WorkloadDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              namespace=~"npd-banking|npd-movie|npd-shop|platform|argocd|vault|keycloak|kong|minio|observability|elastic-system|haproxy-ingress|concert|monitoring|kube-system"
+            } > 0
+            and
+            kube_deployment_spec_replicas{
+              namespace=~"npd-banking|npd-movie|npd-shop|platform|argocd|vault|keycloak|kong|minio|observability|elastic-system|haproxy-ingress|concert|monitoring|kube-system"
+            } > 0
+          for: 5m
+          labels:
+            severity: warning
+            tier: kube
+            namespace: "{{ $labels.namespace }}"
+            deployment: "{{ $labels.deployment }}"
+            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.deployment }} unavailable"
+            description: "desired>0 nhưng unavailable>0 — crash/probe/ImagePull/vault-agent-init."
+
+        - alert: WorkloadStatefulSetUnavailable
+          expr: |
+            kube_statefulset_status_replicas_ready{
+              namespace=~"postgres|redis|rabbit|kafka|vault|minio|platform|observability|elastic-system|monitoring|kube-system"
+            }
+              < kube_statefulset_replicas{
+              namespace=~"postgres|redis|rabbit|kafka|vault|minio|platform|observability|elastic-system|monitoring|kube-system"
+            }
+            and
+            kube_statefulset_replicas{
+              namespace=~"postgres|redis|rabbit|kafka|vault|minio|platform|observability|elastic-system|monitoring|kube-system"
+            } > 0
+          for: 5m
+          labels:
+            severity: warning
+            tier: kube
+            team: "{{ if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+            namespace: "{{ $labels.namespace }}"
+            statefulset: "{{ $labels.statefulset }}"
+            deployment: "{{ $labels.statefulset }}"
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.statefulset }} StatefulSet chưa đủ Ready"
+            description: "replicas Ready < desired 5m."
+
+        # cilium / kube-proxy / node-exporter thường là DaemonSet
+        - alert: WorkloadDaemonSetUnavailable
+          expr: |
+            kube_daemonset_status_number_unavailable{
+              namespace=~"kube-system|haproxy-ingress|monitoring|observability|elastic-system|platform"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            tier: kube
+            team: "{{ if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+            namespace: "{{ $labels.namespace }}"
+            daemonset: "{{ $labels.daemonset }}"
+            deployment: "{{ $labels.daemonset }}"
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.daemonset }} DaemonSet unavailable"
+            description: "{{ $value }} pod DaemonSet chưa Ready — kiểm tra cilium/kube-proxy/node-exporter."
+
+        - alert: WorkloadPodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{
+              namespace=~"npd-banking|npd-movie|npd-shop|platform|argocd|vault|keycloak|kong|postgres|redis|rabbit|kafka|minio|observability|monitoring|elastic-system|haproxy-ingress|concert|kube-system"
+            }[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+            tier: kube
+            namespace: "{{ $labels.namespace }}"
+            pod: "{{ $labels.pod }}"
+            deployment: "{{ $labels.pod }}"
+            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} restart liên tục"
+            description: "Container {{ $labels.container }} >3 restart/15m (kube-system: cilium/coredns/kube-proxy)."

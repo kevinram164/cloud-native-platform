@@ -21,6 +21,7 @@ spec:
             tier: symptom
             impact: transfer
             namespace: npd-banking
+            deployment: api-producer
           annotations:
             summary: "Transfer/downstream không hoạt động — API trả 503/504"
             description: >-
@@ -37,73 +38,12 @@ spec:
             tier: symptom
             impact: transfer
             namespace: npd-banking
+            deployment: api-producer
           annotations:
             summary: "api-producer đang trả 5xx"
             description: "rate 5xx > 0 trên api-producer."
 
-        - alert: BankingTargetDown
-          expr: |
-            up{namespace="npd-banking"} == 0
-          for: 3m
-          labels:
-            severity: critical
-            team: banking
-            namespace: npd-banking
-          annotations:
-            summary: "Banking {{ $labels.job }} không scrape được"
-            description: "Target {{ $labels.instance }} ({{ $labels.job }}) down 3m — pod crash hoặc /metrics lỗi."
-
-    - name: banking.kube
-      rules:
-        - alert: BankingDeploymentUnavailable
-          expr: |
-            kube_deployment_status_replicas_unavailable{namespace="npd-banking"} > 0
-            and
-            kube_deployment_spec_replicas{namespace="npd-banking"} > 0
-          for: 5m
-          labels:
-            severity: warning
-            team: banking
-            tier: infra
-            namespace: npd-banking
-          annotations:
-            summary: "Pod banking unavailable (crash/probe) — {{ $labels.deployment }}"
-            description: "desired>0 nhưng unavailable>0 trong 5m (sự cố thật, không phải scale=0)."
----
-apiVersion: monitoring.coreos.com/v1
-kind: PrometheusRule
-metadata:
-  name: npd-shop-alerts
-  namespace: monitoring
-  labels:
-    app.kubernetes.io/part-of: npd-monitoring
-spec:
-  groups:
-    - name: shop.apps
-      rules:
-        - alert: ShopPodNotReady
-          expr: |
-            kube_deployment_status_replicas_unavailable{namespace="npd-shop"} > 0
-            and
-            kube_deployment_spec_replicas{namespace="npd-shop"} > 0
-          for: 5m
-          labels:
-            severity: warning
-            team: shop
-          annotations:
-            summary: "Shop deployment unavailable"
-            description: "{{ $labels.deployment }} in npd-shop has unavailable replicas."
-
-        - alert: ShopPodRestarting
-          expr: |
-            increase(kube_pod_container_status_restarts_total{namespace="npd-shop"}[15m]) > 3
-          for: 5m
-          labels:
-            severity: warning
-            team: shop
-          annotations:
-            summary: "Shop pod restarting"
-            description: "Pod {{ $labels.pod }} restarted >3 times in 15m."
+        # TargetDown / DeploymentUnavailable → Workload* trong rules-aiops-topology.yaml
 ---
 # CineHome (npd-movie). Không có /metrics trong app:
 #   - traffic public: cloudflared_tunnel_* (PodMonitor cinehome-cloudflared)
@@ -161,6 +101,7 @@ spec:
             team: movie
             tier: symptom
             namespace: npd-movie
+            deployment: movie-api
           annotations:
             summary: "movie-api trả 5xx {{ $value | humanizePercentage }}"
             description: "Tỷ lệ 5xx > 5% trong 5m. Xem trace lỗi: Kibana → APM → movie-api → Errors; log logs-movie-*."
@@ -176,6 +117,7 @@ spec:
             team: movie
             tier: symptom
             namespace: npd-movie
+            deployment: movie-api
           annotations:
             summary: "movie-api p95 {{ $value | humanize }}ms (> 2s)"
             description: "Trang chủ/danh sách phim chậm. Kiểm tra span DB/Redis trong APM (Transactions → span breakdown)."
@@ -188,6 +130,7 @@ spec:
             severity: warning
             team: movie
             namespace: npd-movie
+            deployment: media-worker
           annotations:
             summary: "Hàng đợi transcode tồn {{ $value }} job > 30m"
             description: "media-worker không kịp xử lý hoặc đang down. Kiểm tra kubectl -n npd-movie logs deploy/media-worker."
@@ -255,31 +198,4 @@ spec:
             summary: "Tải segment HLS p95 {{ $value | humanizeDuration }} (segment dài 6s)"
             description: "Gần bằng độ dài segment thì buffer cạn. So với MinIO GET TTFB và băng thông tunnel."
 
-    - name: movie.kube
-      rules:
-        - alert: MovieDeploymentUnavailable
-          expr: |
-            kube_deployment_status_replicas_unavailable{namespace="npd-movie"} > 0
-            and
-            kube_deployment_spec_replicas{namespace="npd-movie"} > 0
-          for: 5m
-          labels:
-            severity: warning
-            team: movie
-            tier: infra
-            namespace: npd-movie
-          annotations:
-            summary: "CineHome {{ $labels.deployment }} unavailable"
-            description: "desired>0 nhưng unavailable>0 trong 5m (crash/probe/ImagePull/vault-agent-init)."
-
-        - alert: MoviePodRestarting
-          expr: |
-            increase(kube_pod_container_status_restarts_total{namespace="npd-movie"}[15m]) > 3
-          for: 5m
-          labels:
-            severity: warning
-            team: movie
-            namespace: npd-movie
-          annotations:
-            summary: "CineHome pod {{ $labels.pod }} restart liên tục"
-            description: "Container {{ $labels.container }} restart >3 lần/15m. media-worker: kiểm tra OOMKilled khi transcode."
+    # DeploymentUnavailable / PodRestarting → Workload* trong rules-aiops-topology.yaml

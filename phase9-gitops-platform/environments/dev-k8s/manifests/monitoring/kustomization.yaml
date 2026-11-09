@@ -11,6 +11,7 @@ resources:
   - rules-apps.yaml
   - rules-infra.yaml
   - rules-platform.yaml
+  - rules-aiops-topology.yaml
   - ingress.yaml
   - digest/cronjob.yaml
 
