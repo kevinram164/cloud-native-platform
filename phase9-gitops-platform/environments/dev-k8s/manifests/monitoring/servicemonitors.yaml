@@ -43,9 +43,11 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: In
-        values: [gateway, auth-service, catalog-service, order-service, payment-worker, shop-web]
+        # shop-web = nginx static — không có /metrics (tránh WorkloadTargetDown giả)
+        values: [gateway, auth-service, catalog-service, order-service, payment-worker]
   endpoints:
-    - targetPort: 8080
+    # Dùng named port http (8001–8080 tùy service); không hardcode 8080
+    - port: http
       path: /metrics
       interval: 15s
       scrapeTimeout: 10s
