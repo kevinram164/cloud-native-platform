@@ -21,12 +21,14 @@ spec:
             tier: symptom
             impact: transfer
             namespace: npd-banking
-            deployment: api-producer
+            # Topology RCA: consumer transfer thường là gốc; api-producer chỉ triệu chứng 503
+            deployment: transfer-service
           annotations:
-            summary: "Transfer/downstream không hoạt động — API trả 503/504"
+            summary: "CK P2P gián đoạn — API banking trả 503/504 (kiểm tra transfer-service)"
             description: >-
-              Có HTTP 503/504 trên ns npd-banking (thường api-producer timeout chờ transfer).
-              Log (Kibana logs-bank-*): producer_timeout / downstream_unavailable.
+              Có HTTP 503/504 trên ns npd-banking. Sau release hạn mức ngày: log Kibana logs-bank-*
+              error_code=TRANSFER_DAILY_LIMIT_EXCEEDED / downstream_unavailable.
+              Runbook: Argo rollback image transfer-service (banking-transfer-service).
 
         - alert: BankingProducer5xx
           expr: |
@@ -38,10 +40,12 @@ spec:
             tier: symptom
             impact: transfer
             namespace: npd-banking
-            deployment: api-producer
+            deployment: transfer-service
           annotations:
-            summary: "api-producer đang trả 5xx"
-            description: "rate 5xx > 0 trên api-producer."
+            summary: "Banking API 5xx — CK có thể không hoàn tất (transfer-service)"
+            description: >-
+              rate 5xx > 0 trên api-producer. Correlate topology transfer-service/npd-banking;
+              Kibana: failure_code / error_code (vd TRANSFER_DAILY_LIMIT_EXCEEDED).
 
         # TargetDown / DeploymentUnavailable → Workload* trong rules-aiops-topology.yaml
 ---
