@@ -45,8 +45,40 @@ kubectl -n npd-banking rollout status deploy/banking-transfer-service
 2. Fix: `P2P_DAILY_LIMIT_STRICT_DEFAULT=false` + `P2P_DAILY_LIMIT_VND` hợp lệ (xem `banking-demo/deploy/dev-k8s/DEMO_SCRIPT_P2P_LIMIT.md`).
 3. CI → Argo sync → E2E peer + CK tay → resolve incident / đánh dấu runbook worked.
 
-## 5. Gắn Concert (UI)
+## 5. Tạo Runbook trên Concert Operate (AIOps) — làm một lần
 
-- Recommended action / Runbook Automation: trỏ runbook này.
-- Match alertname: `BankingTransferUnavailable`, `BankingProducer5xx` (và `Workload*` nếu pod lệch).
-- Resource hint: `transfer-service` / namespace `npd-banking`.
+File Markdown này là SOP nguồn. Runbook thật nằm trong **Operate → Automations → Runbooks**.
+
+Demo lab: dùng **Manual runbook** (ops làm theo bước trên Argo UI / terminal). Semi-auto (HTTP Action gọi Argo API) để sau nếu cần.
+
+### 5.1 Tạo runbook
+
+1. Concert Operate console → menu **Operate** → **Automations**.
+2. Tab **Runbooks** (Library).
+3. **Create runbook** (hoặc *New runbook*).
+4. Điền:
+   - **Name:** `Rollback banking transfer-service (P2P outage)`
+   - **Description:** `CK P2P 503 / TRANSFER_DAILY_LIMIT_EXCEEDED sau bad release — rollback Argo app banking-transfer-service.`
+   - **Tags:** `banking`, `transfer-service`, `rollback`, `gitops`
+5. Thêm **manual steps** (copy từ mục 1–4 ở trên), tối thiểu:
+   - Step 1: Xác nhận Telegram/Alert `BankingTransferUnavailable` + log `TRANSFER_DAILY_LIMIT_EXCEEDED`.
+   - Step 2: Mở ArgoCD `https://npd-argocd.co` → app `banking-transfer-service` → History → Rollback revision trước fault (hoặc lệnh `argocd app rollback …`).
+   - Step 3: Nếu auto-sync kéo lại bản lỗi → Suspend sync / revert Git.
+   - Step 4: Verify CK tay SUCCESS; chờ alert RESOLVED.
+   - Step 5: Đánh dấu Runbook Worked; mở change cho eng fix `P2P_DAILY_LIMIT_*`.
+6. **Save draft** → **Run** thử (dry) → **Publish** (operator mới thấy trên Incident).
+
+Role cần: RBA Author / Approver (tuỳ bản Concert).
+
+### 5.2 Gắn với alert / incident (để hiện trên RCA)
+
+Cách A — **Policy** (khuyến nghị demo):
+
+1. **Operate → Automations → Policies** → Create / template gần *runbook* / *recommended action*.
+2. Condition: alertname contains `BankingTransferUnavailable` **OR** `BankingProducer5xx`; namespace `npd-banking` (nếu filter được).
+3. Action: **Suggest / attach runbook** → chọn `Rollback banking transfer-service (P2P outage)`.
+4. Execution: **manual approval** (ops bấm Run trên Incident) — không auto-rollback production lab trừ khi bạn chủ đích.
+
+Cách B — Khi đang xem Incident: **Runbooks** / **Recommended actions** → Run → Start Runbook (nếu policy đã match).
+
+Sau khi chạy xong: rate runbook → **Runbook Worked** để AI ưu tiên lần sau.
