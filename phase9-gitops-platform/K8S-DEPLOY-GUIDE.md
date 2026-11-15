@@ -69,6 +69,15 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 `server.insecure=true` vì TLS đã kết thúc ở f5-lb. Ingress `npd-argocd.co` do Application `platform-ingress` tạo ở bước sau. Trước đó có thể dùng `kubectl port-forward svc/argocd-server -n argocd 8080:80`.
 
+**Telegram notify (sync OK/FAIL):** sau khi Vault có `secret/platform/alertmanager-telegram` `{bot_token}`:
+
+```bash
+VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=<root-or-admin> \
+  bash phase9-gitops-platform/environments/dev-k8s/scripts/argocd-enable-notifications.sh
+```
+
+Values: `environments/dev-k8s/argocd-install/values-notifications.yaml` (chat `-1004489182185`). Jenkins CI dùng cùng bot qua shared library `notifyTelegram` (cần chạy lại `vault-setup-k8s-auth.sh` để role `jenkins-kaniko` đọc secret telegram).
+
 Repo GitHub public nên ArgoCD không cần credential.
 
 ## 4. Triển khai theo giai đoạn

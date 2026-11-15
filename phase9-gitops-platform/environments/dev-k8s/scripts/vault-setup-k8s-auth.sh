@@ -6,7 +6,7 @@
 #   bash phase9-gitops-platform/environments/dev-k8s/scripts/vault-setup-k8s-auth.sh
 #
 # Role                SA (namespace)                                      Đọc
-# jenkins-kaniko      jenkins-kaniko (platform)                           platform/harbor, platform/github (+ cinehome, aiops)
+# jenkins-kaniko      jenkins-kaniko (platform)                           platform/harbor, platform/github, platform/alertmanager-telegram (+ cinehome, npd-shop, aiops)
 # jenkins             jenkins (platform)                                  platform/jenkins, platform/keycloak-clients
 # keycloak            keycloak (keycloak), keycloak-db-init (postgres)     platform/keycloak
 # rabbitmq            rabbitmq (rabbit)                                   rabbitmq/admin
@@ -59,6 +59,7 @@ vexec "vault write auth/kubernetes/config kubernetes_host=https://kubernetes.def
 policy jenkins-kaniko <<'EOF'
 path "secret/data/platform/harbor" { capabilities = ["read"] }
 path "secret/data/platform/github" { capabilities = ["read"] }
+path "secret/data/platform/alertmanager-telegram" { capabilities = ["read"] }
 path "secret/data/cinehome/harbor" { capabilities = ["read"] }
 path "secret/data/cinehome/harbor-pull" { capabilities = ["read"] }
 path "secret/metadata/cinehome/*" { capabilities = ["read", "list"] }
