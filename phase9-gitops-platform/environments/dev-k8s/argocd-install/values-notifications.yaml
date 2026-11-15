@@ -1,10 +1,7 @@
-# Helm values overlay — Argo CD Notifications → Telegram
-# Cùng bot/chat Alertmanager (chat_id -1004489182185).
-#
-# Áp dụng:
-#   bash phase9-gitops-platform/environments/dev-k8s/scripts/argocd-enable-notifications.sh
-#
-# Secret argocd-notifications-secret key telegram-token (script seed từ Vault).
+# (Tuỳ chọn) Helm values nếu ArgoCD cài bằng Helm còn release.
+# Lab hiện tại: dùng argocd-notifications-cm.yaml + script (không helm) —
+#   bash …/scripts/argocd-enable-notifications.sh
+# Chat: -1004489182185. Secret: argocd-notifications-secret / telegram-token.
 
 notifications:
   enabled: true
