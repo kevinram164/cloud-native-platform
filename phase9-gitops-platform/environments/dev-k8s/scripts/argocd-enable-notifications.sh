@@ -2,21 +2,19 @@
 # Bật Argo CD Notifications → Telegram (cùng Vault bot Alertmanager).
 #
 # Prerequisites:
-#   - helm repo argo, release name `argocd` ns `argocd`
-#   - VAULT_TOKEN (hoặc đã login) để đọc secret/platform/alertmanager-telegram
+#   - helm release `argocd` ns `argocd`
+#   - VAULT_TOKEN (root/admin) — đọc secret qua kubectl exec vault-0 (không cần port-forward)
 #   - kubectl context = npd-k8s
 #
-# Usage (từ root cloud-native-platform hoặc bất kỳ cwd):
-#   VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=... \
-#     bash phase9-gitops-platform/environments/dev-k8s/scripts/argocd-enable-notifications.sh
+# Usage:
+#   VAULT_TOKEN=hvs.... bash phase9-gitops-platform/environments/dev-k8s/scripts/argocd-enable-notifications.sh
 set -euo pipefail
 
-# scripts → …/phase9-gitops-platform/environments/dev-k8s/scripts
 PHASE9="$(cd "$(dirname "$0")/../../.." && pwd)"
 VALUES="${PHASE9}/environments/dev-k8s/argocd-install/values-notifications.yaml"
 NS="${ARGOCD_NS:-argocd}"
 RELEASE="${ARGOCD_RELEASE:-argocd}"
-VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
+VAULT_NS="${VAULT_NS:-vault}"
 
 if [[ ! -f "$VALUES" ]]; then
   echo "Missing values file: $VALUES" >&2
@@ -24,16 +22,27 @@ if [[ ! -f "$VALUES" ]]; then
 fi
 
 if [[ -z "${VAULT_TOKEN:-}" ]]; then
-  echo "Set VAULT_TOKEN (read secret/platform/alertmanager-telegram)" >&2
+  echo "Set VAULT_TOKEN (read secret/platform/alertmanager-telegram via vault-0)" >&2
   exit 1
 fi
 
-echo "==> Read Telegram bot_token from Vault"
-RAW="$(curl -sS -H "X-Vault-Token: ${VAULT_TOKEN}" \
-  "${VAULT_ADDR%/}/v1/secret/data/platform/alertmanager-telegram")"
-TOKEN="$(echo "$RAW" | python3 -c 'import json,sys; d=json.load(sys.stdin); print((d.get("data") or {}).get("data") or {}).get("bot_token") or "")')"
+echo "==> Read Telegram bot_token from Vault (kubectl exec ${VAULT_NS}/vault-0)"
+RAW="$(kubectl exec -i -n "${VAULT_NS}" vault-0 -- \
+  env VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN="${VAULT_TOKEN}" \
+  vault kv get -format=json secret/platform/alertmanager-telegram)"
+
+TOKEN="$(echo "$RAW" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+data=(d.get("data") or {})
+# vault kv get -format=json: data.data for KV v2
+inner=data.get("data") if isinstance(data.get("data"), dict) else data
+print((inner or {}).get("bot_token") or (inner or {}).get("token") or "")
+')"
+
 if [[ -z "$TOKEN" ]]; then
-  echo "Vault secret missing bot_token: $RAW" >&2
+  echo "Vault secret missing bot_token. Raw:" >&2
+  echo "$RAW" >&2
   exit 1
 fi
 

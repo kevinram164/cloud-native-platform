@@ -69,10 +69,10 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 `server.insecure=true` vì TLS đã kết thúc ở f5-lb. Ingress `npd-argocd.co` do Application `platform-ingress` tạo ở bước sau. Trước đó có thể dùng `kubectl port-forward svc/argocd-server -n argocd 8080:80`.
 
-**Telegram notify (sync OK/FAIL):** sau khi Vault có `secret/platform/alertmanager-telegram` `{bot_token}`:
+**Telegram notify (sync OK/FAIL):** sau khi Vault có `secret/platform/alertmanager-telegram` `{bot_token}` (script đọc Vault bằng `kubectl exec vault-0`, **không** cần port-forward `127.0.0.1:8200`):
 
 ```bash
-VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN=<root-or-admin> \
+VAULT_TOKEN=<root-or-admin> \
   bash phase9-gitops-platform/environments/dev-k8s/scripts/argocd-enable-notifications.sh
 ```
 
