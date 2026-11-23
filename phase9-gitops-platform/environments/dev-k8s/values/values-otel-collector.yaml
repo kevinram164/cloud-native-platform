@@ -1,9 +1,9 @@
 # OpenTelemetry Collector — dev-k8s
 # App (banking / shop / movie) → OTLP :4317/:4318 → dual:
 #   - Elastic APM Server (Kibana APM)
-#   - Instana TechZone (Applications / OpenTelemetry)
+#   - Instana qua host agent (instana-agent:4317) — agent đã Connected TechZone
+#     (npd CoreDNS không resolve otlp-grpc.instana.apps… → no such host)
 # spanmetrics → :8889 → ServiceMonitor → Grafana
-# Secret: observability/instana-otlp-credentials (key) — seed-otlp-secret.sh hoặc Vault secret/platform/instana
 
 fullnameOverride: opentelemetry-collector
 mode: deployment
@@ -22,21 +22,12 @@ extraEnvs:
     valueFrom:
       fieldRef:
         fieldPath: status.podIP
-  - name: K8S_NODE_NAME
-    valueFrom:
-      fieldRef:
-        fieldPath: spec.nodeName
   # Secret do ECK tạo cùng ns observability
   - name: APM_SECRET_TOKEN
     valueFrom:
       secretKeyRef:
         name: apm-apm-token
         key: secret-token
-  - name: INSTANA_KEY
-    valueFrom:
-      secretKeyRef:
-        name: instana-otlp-credentials
-        key: key
 
 config:
   extensions:
@@ -104,14 +95,11 @@ config:
       retry_on_failure:
         enabled: true
         max_elapsed_time: 120s
+    # Host agent đã Connected TechZone :443 — tránh DNS/OTLP acceptor TechZone từ npd
     otlp/instana:
-      endpoint: otlp-grpc.instana.apps.itz-tdl40p.infra01-lb.dal14.techzone.ibm.com:443
-      headers:
-        x-instana-key: ${env:INSTANA_KEY}
-        x-instana-host: ${env:K8S_NODE_NAME}
+      endpoint: instana-agent.instana-agent.svc.cluster.local:4317
       tls:
-        insecure: false
-        insecure_skip_verify: true
+        insecure: true
       compression: gzip
       sending_queue:
         enabled: true

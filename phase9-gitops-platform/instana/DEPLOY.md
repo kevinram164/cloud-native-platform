@@ -64,24 +64,31 @@ kubectl -n kafka exec deploy/strimzi-cluster-operator -- df -h /tmp   # expect �
 
 ## 2c. App APM → Instana (npd: banking / shop / movie)
 
-Collector `environments/dev-k8s/values/values-otel-collector.yaml` dual-export:
-**Elastic APM + Instana TechZone**. Apps đã trỏ OTLP chung
-`opentelemetry-collector.observability:4317` — không đổi từng service.
+Collector dual-export: **Elastic APM + Instana host agent**
+(`instana-agent.instana-agent:4317`). Không dùng `otlp-grpc.instana.apps…`
+trực tiếp — npd CoreDNS thường `no such host` với hostname TechZone OTLP.
+
+Apps đã trỏ `opentelemetry-collector.observability:4317` — không đổi từng service.
 
 ```bash
-# Key trong Vault (một lần): vault kv put secret/platform/instana key='...'
-# Push git (values-otel-collector) → rồi:
-VAULT_TOKEN=<token> \
-  bash phase9-gitops-platform/environments/dev-k8s/scripts/instana-seed-otlp-and-sync.sh
+# Push git values-otel-collector → Argo sync observability-otel-collector
+kubectl -n argocd annotate application observability-otel-collector \
+  argocd.argoproj.io/refresh=hard --overwrite
+# hoặc:
+kubectl -n observability rollout restart deploy/opentelemetry-collector
 
-# hoặc: INSTANA_KEY='...' bash .../instana-seed-otlp-and-sync.sh
-kubectl -n observability logs deploy/opentelemetry-collector --tail=80 | grep -iE 'instana|Export|error'
+# Agent phải expose OTLP gRPC :4317
+kubectl -n instana-agent get svc
+kubectl -n observability logs deploy/opentelemetry-collector --tail=50 | grep -iE 'instana|Export|error|no such'
+
+# Smoke: collector → agent
+kubectl -n observability exec deploy/opentelemetry-collector -- \
+  wget -qO- --timeout=3 http://instana-agent.instana-agent.svc.cluster.local:4317 2>&1 | head -5 || true
 ```
 
-Application Perspective: filter **`Dest Kubernetes Namespace`** = `npd-banking` /
-`npd-shop` / `npd-movie`. **Không** AND `Dest Agent zone` (OTLP SaaS thường
-không gắn zone host agent). Hoặc filter `Call technology = OpenTelemetry`.
-
+Application Perspective: `Dest Kubernetes Namespace` = `npd-banking` /
+`npd-shop` / `npd-movie` (có thể giữ zone `horizone-vn` nếu trace đi qua agent).
+Hoặc `Call technology = OpenTelemetry`.
 ## 3. Verify Instana UI
 
 1. Infrastructure → zone **horizone-vn** (hosts)
