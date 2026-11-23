@@ -195,7 +195,7 @@ spec:
       interval: 30s
       honorLabels: true
 ---
-# CineHome Cloudflare Tunnel (cloudflared --metrics 0.0.0.0:2000): traffic public cinehome.automationecom.click
+# CineHome Cloudflare Tunnel (cloudflared --metrics 0.0.0.0:2000): traffic public cinehome.sellermanager.click
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:

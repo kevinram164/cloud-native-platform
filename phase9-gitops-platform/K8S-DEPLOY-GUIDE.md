@@ -43,7 +43,7 @@ DNS (hoặc `hosts` trên máy client) trỏ các tên sau về `10.100.1.100`:
 | `npd-alertmanager.co` | `monitoring/kube-prometheus-stack-alertmanager:9093` | platform |
 | `npd-kibana.co` | `observability/kb-kb-http:5601` | platform |
 | `npd-banking.co` | Ingress `npd-banking` (frontend + Kong) | banking-demo |
-| `npd-movie.co` | `npd-movie/movie-web:8080` (public: `cinehome.automationecom.click` qua Cloudflare Tunnel) | movie-web |
+| `npd-movie.co` | `npd-movie/movie-web:8080` (public: `cinehome.sellermanager.click` qua Cloudflare Tunnel) | movie-web |
 
 NGINX Plus trên f5-lb cần upstream `10.100.1.46:80` cho các server name trên, kèm `proxy_set_header Host $host` và `X-Forwarded-Proto https`. Với Harbor, đặt `client_max_body_size 0`. Mỗi domain có một file trong `environments/dev-k8s/f5-lb/conf.d/`; cert `/etc/nginx/certs/tls.crt` phải có SAN cho domain mới (hoặc wildcard).
 
@@ -413,7 +413,7 @@ kubectl apply -f deploy/dev-k8s/argocd/appproject.yaml
 kubectl apply -f deploy/dev-k8s/argocd/app-of-apps.yaml
 ```
 
-Public `cinehome.automationecom.click` đi qua Cloudflare Tunnel (`cloudflared` trong `npd-movie`, token từ Vault). Tắt connector trên OCP trước khi bật trên dev-k8s. Chi tiết: `movie-web/deploy/dev-k8s/README.md`.
+Public `cinehome.sellermanager.click` đi qua Cloudflare Tunnel (`cloudflared` trong `npd-movie`, token từ Vault). Tắt connector trên OCP trước khi bật trên dev-k8s. Chi tiết: `movie-web/deploy/dev-k8s/README.md`.
 
 ## 10. Kiểm tra
 

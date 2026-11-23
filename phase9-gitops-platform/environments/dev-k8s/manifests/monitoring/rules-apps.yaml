@@ -64,23 +64,6 @@ spec:
   groups:
     - name: movie.symptoms
       rules:
-        - alert: MovieSiteUnreachable
-          expr: |
-            (sum(cloudflared_tunnel_ha_connections{namespace="npd-movie"}) or vector(0)) < 1
-          for: 2m
-          labels:
-            severity: critical
-            team: movie
-            tier: symptom
-            namespace: npd-movie
-            # AIOps Generic Webhook JSONata → resource.name = cloudflared/npd-movie (khớp topology)
-            deployment: cloudflared
-          annotations:
-            summary: "cinehome.automationecom.click mất kết nối Cloudflare Tunnel"
-            description: >-
-              Không còn connection nào từ cloudflared tới Cloudflare trong 2m → người dùng nhận lỗi 1033.
-              Kiểm tra: kubectl -n npd-movie logs deploy/cloudflared; token Vault secret/cinehome/cloudflared; egress 7844.
-
         - alert: MovieTunnelErrors
           expr: |
             sum(rate(cloudflared_tunnel_request_errors{namespace="npd-movie"}[5m]))
