@@ -14,6 +14,8 @@ nodePool:
   roles:
     - controller
     - broker
+  # /tmp emptyDir cho Instana JVM attach (default Strimzi 1Mi)
+  tmpDirSizeLimit: 64Mi
   storage:
     size: 20Gi
     class: nfs-csi
@@ -42,6 +44,7 @@ kafka:
   tlsScramListener: true
   enableAuthorization: true
   hardAntiAffinity: false
+  tmpDirSizeLimit: 64Mi
   networkPolicyPeers:
     - namespaceSelector: {}
       podSelector: {}
@@ -64,6 +67,9 @@ kafka:
     log.segment.bytes: "268435456"
     log.roll.ms: "86400000"
     compression.type: lz4
+
+entityOperator:
+  tmpDirSizeLimit: 64Mi
 
 topics:
   - name: orders.events

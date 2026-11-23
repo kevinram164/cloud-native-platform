@@ -22,6 +22,8 @@ spec:
         watchNamespaces:
           - kafka
         watchAnyNamespace: false
+        # Instana JVM attach cần vài MB trong /tmp (default emptyDir 1Mi → full → attach fail)
+        tmpDirSizeLimit: 64Mi
         # K8s ≥1.33 trả /version.emulationMajor — fabric8 trong Strimzi 0.46 không parse được
         extraEnvs:
           - name: STRIMZI_KUBERNETES_VERSION

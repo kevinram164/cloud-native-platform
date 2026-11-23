@@ -1,0 +1,31 @@
+# Overlay Instana host-agent — sensor credentials (lab npd-k8s).
+# Áp dụng:
+#   VAULT_TOKEN=... bash phase9-gitops-platform/environments/dev-k8s/scripts/instana-apply-sensor-credentials.sh
+#
+# File này chỉ là mẫu tĩnh (Redis/Postgres đã có trong Git values infra).
+# Script sẽ merge RabbitMQ + Jenkins từ Vault rồi helm upgrade / patch Agent CR.
+#
+# Không commit password Rabbit/Jenkins vào Git — script lấy lúc apply.
+
+agent:
+  configuration_yaml: |
+    # --- Redis (values-redis-ha.yaml) ---
+    com.instana.plugin.redis:
+      password: 'Mbfs@2025'
+      poll_rate: 10
+
+    # --- PostgreSQL (values-postgres-ha.yaml) ---
+    # Cần DB trùng tên user (hoặc set database). Lab: user banking / db banking.
+    com.instana.plugin.postgresql:
+      user: 'banking'
+      password: 'bankingpass'
+      database: 'banking'
+      poll_rate: 10
+
+    # --- RabbitMQ / Jenkins: điền bởi script từ Vault ---
+    # com.instana.plugin.rabbitmq:
+    #   user: '...'
+    #   password: '...'
+    # com.instana.plugin.jenkins:
+    #   user: '...'
+    #   password: '...'

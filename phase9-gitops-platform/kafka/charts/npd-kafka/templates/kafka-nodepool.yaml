@@ -26,6 +26,8 @@ spec:
     {{- toYaml .Values.nodePool.jvmOptions | nindent 4 }}
   template:
     pod:
+      # Instana host-agent ghi JAR vào /tmp — default Strimzi 1Mi dễ đầy
+      tmpDirSizeLimit: {{ .Values.nodePool.tmpDirSizeLimit | default "64Mi" | quote }}
       metadata:
         labels:
           app.kubernetes.io/part-of: npd-kafka

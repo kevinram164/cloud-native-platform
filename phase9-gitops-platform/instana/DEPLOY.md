@@ -49,6 +49,19 @@ oc -n instana-otel-collector get ds,sts,pods
 Script lấy key từ `secret/instana-otlp-credentials` (ESO ← Vault), `--set instanaKey=...`.
 **Không** ghi key vào `values-idot-ocp.yaml`.
 
+## 2b. Host agent sensors (npd-k8s / kubeadm)
+
+Redis / Postgres / RabbitMQ / Jenkins credentials + Strimzi `/tmp` 64Mi (Instana JVM attach):
+
+```bash
+# 1) Push cloud-native-platform → Argo sync infra-strimzi + infra-kafka
+# 2) Sensor config (Rabbit/Jenkins từ Vault; Redis/PG theo values lab)
+VAULT_TOKEN=<token> \
+  bash phase9-gitops-platform/environments/dev-k8s/scripts/instana-apply-sensor-credentials.sh
+
+kubectl -n kafka exec deploy/strimzi-cluster-operator -- df -h /tmp   # expect ≥64Mi
+```
+
 ## 3. Verify Instana UI
 
 1. Infrastructure → cluster **ocp01**

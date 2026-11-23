@@ -58,6 +58,7 @@ spec:
     {{- end }}
     template:
       pod:
+        tmpDirSizeLimit: {{ .Values.kafka.tmpDirSizeLimit | default "64Mi" | quote }}
         affinity:
           podAntiAffinity:
             {{- if .Values.kafka.hardAntiAffinity }}
@@ -78,6 +79,9 @@ spec:
   entityOperator:
     topicOperator: {}
     userOperator: {}
+    template:
+      pod:
+        tmpDirSizeLimit: {{ .Values.entityOperator.tmpDirSizeLimit | default "64Mi" | quote }}
   kafkaExporter:
     topicRegex: ".*"
     groupRegex: ".*"
