@@ -62,10 +62,30 @@ VAULT_TOKEN=<token> \
 kubectl -n kafka exec deploy/strimzi-cluster-operator -- df -h /tmp   # expect ≥64Mi
 ```
 
+## 2c. App APM → Instana (npd: banking / shop / movie)
+
+Collector `environments/dev-k8s/values/values-otel-collector.yaml` dual-export:
+**Elastic APM + Instana TechZone**. Apps đã trỏ OTLP chung
+`opentelemetry-collector.observability:4317` — không đổi từng service.
+
+```bash
+# Key trong Vault (một lần): vault kv put secret/platform/instana key='...'
+# Push git (values-otel-collector) → rồi:
+VAULT_TOKEN=<token> \
+  bash phase9-gitops-platform/environments/dev-k8s/scripts/instana-seed-otlp-and-sync.sh
+
+# hoặc: INSTANA_KEY='...' bash .../instana-seed-otlp-and-sync.sh
+kubectl -n observability logs deploy/opentelemetry-collector --tail=80 | grep -iE 'instana|Export|error'
+```
+
+Application Perspective: filter **`Dest Kubernetes Namespace`** = `npd-banking` /
+`npd-shop` / `npd-movie`. **Không** AND `Dest Agent zone` (OTLP SaaS thường
+không gắn zone host agent). Hoặc filter `Call technology = OpenTelemetry`.
+
 ## 3. Verify Instana UI
 
-1. Infrastructure → cluster **ocp01**
-2. Applications → OpenTelemetry services
+1. Infrastructure → zone **horizone-vn** (hosts)
+2. Applications → OpenTelemetry / namespace npd-*
 3. Filter: Call technology = OpenTelemetry
 
 ## Ghi chú

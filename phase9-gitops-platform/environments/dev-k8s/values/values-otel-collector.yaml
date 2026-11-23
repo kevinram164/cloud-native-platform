@@ -1,10 +1,9 @@
-# OpenTelemetry Collector — dev-k8s, gateway OTLP → Elastic APM Server (traces/metrics/logs)
-# Chart: open-telemetry/opentelemetry-collector
-# App gửi OTLP tới opentelemetry-collector.observability:4317 (gRPC) / :4318 (HTTP).
-# APM Server (ECK, manifests/elastic/apm-server.yaml) nhận OTLP gRPC native trên :8200.
-# spanmetrics: sinh RED metrics từ trace (traces_span_metrics_calls_total, ..._duration_milliseconds_bucket)
-# → :8889/metrics → ServiceMonitor otel-spanmetrics (manifests/monitoring) → Grafana. App không cần /metrics.
-# Metrics OTLP do app tự ghi (pipeline metrics) cũng ra cùng :8889.
+# OpenTelemetry Collector — dev-k8s
+# App (banking / shop / movie) → OTLP :4317/:4318 → dual:
+#   - Elastic APM Server (Kibana APM)
+#   - Instana TechZone (Applications / OpenTelemetry)
+# spanmetrics → :8889 → ServiceMonitor → Grafana
+# Secret: observability/instana-otlp-credentials (key) — seed-otlp-secret.sh hoặc Vault secret/platform/instana
 
 fullnameOverride: opentelemetry-collector
 mode: deployment
@@ -23,12 +22,21 @@ extraEnvs:
     valueFrom:
       fieldRef:
         fieldPath: status.podIP
+  - name: K8S_NODE_NAME
+    valueFrom:
+      fieldRef:
+        fieldPath: spec.nodeName
   # Secret do ECK tạo cùng ns observability
   - name: APM_SECRET_TOKEN
     valueFrom:
       secretKeyRef:
         name: apm-apm-token
         key: secret-token
+  - name: INSTANA_KEY
+    valueFrom:
+      secretKeyRef:
+        name: instana-otlp-credentials
+        key: key
 
 config:
   extensions:
@@ -96,25 +104,40 @@ config:
       retry_on_failure:
         enabled: true
         max_elapsed_time: 120s
+    otlp/instana:
+      endpoint: otlp-grpc.instana.apps.itz-tdl40p.infra01-lb.dal14.techzone.ibm.com:443
+      headers:
+        x-instana-key: ${env:INSTANA_KEY}
+        x-instana-host: ${env:K8S_NODE_NAME}
+      tls:
+        insecure: false
+        insecure_skip_verify: true
+      compression: gzip
+      sending_queue:
+        enabled: true
+        queue_size: 2000
+      retry_on_failure:
+        enabled: true
+        max_elapsed_time: 120s
   service:
     extensions: [health_check]
     pipelines:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlp/apm, spanmetrics]
+        exporters: [otlp/apm, otlp/instana, spanmetrics]
       metrics/spanmetrics:
         receivers: [spanmetrics]
         exporters: [prometheus]
-      # Metrics OTLP của app (vd. cinehome_playback_* từ movie-api) → APM + Prometheus
+      # Metrics OTLP của app (vd. cinehome_playback_* từ movie-api) → APM + Instana + Prometheus
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlp/apm, prometheus]
+        exporters: [otlp/apm, otlp/instana, prometheus]
       logs:
         receivers: [otlp]
         processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlp/apm]
+        exporters: [otlp/apm, otlp/instana]
 
 resources:
   requests:
