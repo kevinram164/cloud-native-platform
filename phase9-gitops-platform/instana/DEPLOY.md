@@ -99,6 +99,7 @@ Hoặc `Call technology = OpenTelemetry`.
 
 - Browser "Not secure" → shared collector dùng `tls.insecure_skip_verify: true`
 - Host agent: xem **[TROUBLESHOOTING-HOST-AGENT.md](./TROUBLESHOOTING-HOST-AGENT.md)** (timeout 1443, 404 NR trên :443, sửa Core `acceptors.agent.port`)
+- **Logs + trace.id (INFO/WARN/ERROR → Instana):** xem **[LOGS-TO-INSTANA.md](./LOGS-TO-INSTANA.md)** (triển khai, khi nào sửa code, Java agent vs OTel)
 - **ALPN / Not Monitoring:** nếu log có `missing selected ALPN property` → LB TechZone
   không negotiate HTTP/2 cho gRPC. Set `GRPC_ENFORCE_ALPN_ENABLED=false` trên DS/STS
   (đã có trong `values-idot-ocp.yaml`) rồi `helm upgrade` lại.
