@@ -22,6 +22,8 @@
 # cinehome-cloudflared cloudflared (npd-movie)                            cinehome/cloudflared
 # npd-shop-app        gateway/auth/catalog/order/payment (npd-shop)       npd-shop/app
 # npd-shop-db-init    noli-db-init (postgres)                             npd-shop/noli-db
+# fineract-app        fineract-server (npd-fineract)                      fineract/db
+# fineract-db-init    fineract-db-init (postgres)                         fineract/db
 set -euo pipefail
 
 : "${VAULT_TOKEN:?export VAULT_TOKEN trước khi chạy}"
@@ -30,6 +32,8 @@ BANKING_NS="${BANKING_NS:-npd-banking}"
 BANKING_SAS="${BANKING_SAS:-auth-service,account-service,transfer-service,notification-service,api-producer}"
 SHOP_NS="${SHOP_NS:-npd-shop}"
 SHOP_SAS="${SHOP_SAS:-gateway,auth-service,catalog-service,order-service,payment-worker}"
+FINERACT_NS="${FINERACT_NS:-npd-fineract}"
+FINERACT_SAS="${FINERACT_SAS:-fineract-server}"
 
 vexec() {
   kubectl exec -i -n "${VAULT_NS}" vault-0 -- env VAULT_ADDR=http://127.0.0.1:8200 VAULT_TOKEN="${VAULT_TOKEN}" sh -c "$1"
@@ -68,6 +72,9 @@ path "secret/data/npd-shop/harbor-pull" { capabilities = ["read"] }
 path "secret/metadata/npd-shop/*" { capabilities = ["read", "list"] }
 path "secret/data/aiops/harbor" { capabilities = ["read"] }
 path "secret/metadata/aiops/*" { capabilities = ["read", "list"] }
+path "secret/data/fineract/harbor" { capabilities = ["read"] }
+path "secret/data/fineract/harbor-pull" { capabilities = ["read"] }
+path "secret/metadata/fineract/*" { capabilities = ["read", "list"] }
 EOF
 
 policy jenkins <<'EOF'
@@ -127,6 +134,14 @@ policy npd-shop-db-init <<'EOF'
 path "secret/data/npd-shop/noli-db" { capabilities = ["read"] }
 EOF
 
+policy fineract-app <<'EOF'
+path "secret/data/fineract/db" { capabilities = ["read"] }
+EOF
+
+policy fineract-db-init <<'EOF'
+path "secret/data/fineract/db" { capabilities = ["read"] }
+EOF
+
 role jenkins-kaniko jenkins-kaniko platform jenkins-kaniko
 role jenkins jenkins platform jenkins
 role keycloak keycloak,keycloak-db-init keycloak,postgres keycloak
@@ -141,12 +156,15 @@ role cinehome-db-init movie-db-init postgres cinehome-db-init
 role cinehome-cloudflared cloudflared npd-movie cinehome-cloudflared
 role npd-shop-app "${SHOP_SAS}" "${SHOP_NS}" npd-shop-app
 role npd-shop-db-init noli-db-init postgres npd-shop-db-init
+role fineract-app "${FINERACT_SAS}" "${FINERACT_NS}" fineract-app
+role fineract-db-init fineract-db-init postgres fineract-db-init
 
 echo "==> Kiểm tra secret đã seed"
 for p in platform/harbor platform/harbor-pull platform/github platform/jenkins platform/keycloak platform/keycloak-clients \
          platform/minio platform/grafana platform/alertmanager-telegram platform/alertmanager-aiops platform/elastic \
          rabbitmq/admin banking/db banking/rabbitmq \
          cinehome/harbor cinehome/harbor-pull cinehome/app cinehome/movie-db cinehome/cloudflared \
-         npd-shop/app npd-shop/noli-db npd-shop/harbor-pull npd-shop/harbor; do
+         npd-shop/app npd-shop/noli-db npd-shop/harbor-pull npd-shop/harbor \
+         fineract/db fineract/harbor-pull fineract/harbor; do
   vexec "vault kv get secret/$p >/dev/null 2>&1" && echo "OK      secret/$p" || echo "MISSING secret/$p"
 done
