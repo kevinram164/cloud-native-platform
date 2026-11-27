@@ -1,0 +1,392 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "RPS (all)",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\"}[5m]))",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "5xx RPS",
+      "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",status=~\"5..\"}[5m])) or vector(0)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "value" },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error % (SERVER_ERROR)",
+      "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",outcome=\"SERVER_ERROR\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\"}[5m])), 1e-9)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "value" },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Transfer RPS",
+      "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*accounttransfers.*\"}[5m])) or vector(0)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "REST accounttransfers (không có MDB/T24-style counter)."
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Savings txn RPS",
+      "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*savingsaccounts.*/transactions.*\"}[5m])) or vector(0)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Loan API RPS",
+      "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*/loans.*\"}[5m])) or vector(0)",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Request rate by outcome",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\"}[5m])) by (outcome)",
+          "legendFormat": "{{outcome}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "HTTP status rate",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\"}[5m])) by (status)",
+          "legendFormat": "{{status}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "BPM / nghiệp vụ — RPS (transfer / savings txn / loans / clients)",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*accounttransfers.*\"}[5m]))",
+          "legendFormat": "transfer",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*savingsaccounts.*/transactions.*\"}[5m]))",
+          "legendFormat": "savings-txn",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*/loans.*\"}[5m]))",
+          "legendFormat": "loans",
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*/clients.*\"}[5m]))",
+          "legendFormat": "clients",
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Synthetic B1–B3 / V1–V3 map vào các URI REST này. Correlate Instana: X-Business-Flow / X-Correlation-ID."
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "BPM / nghiệp vụ — lỗi (4xx+5xx RPS)",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*accounttransfers.*\",status=~\"[45]..\"}[5m]))",
+          "legendFormat": "transfer err",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*savingsaccounts.*/transactions.*\",status=~\"[45]..\"}[5m]))",
+          "legendFormat": "savings-txn err",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*/loans.*\",status=~\"[45]..\"}[5m]))",
+          "legendFormat": "loans err",
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\",uri=~\".*/clients.*\",status=~\"[45]..\"}[5m]))",
+          "legendFormat": "clients err",
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Latency p95 by URI (seconds)",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{namespace=\"npd-fineract\",application=\"fineract\"}[5m])) by (uri, le))",
+          "legendFormat": "{{uri}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "description": "Cần FINERACT_MANAGEMENT_METRICS_DISTRIBUTION_HTTP_SERVER_REQUESTS=true (đã bật trong values-observability)."
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Mean latency (sum/count) by outcome",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_server_requests_seconds_sum{namespace=\"npd-fineract\",application=\"fineract\"}[5m])) by (outcome) / clamp_min(sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\"}[5m])) by (outcome), 1e-9)",
+          "legendFormat": "{{outcome}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "HikariCP pool",
+      "gridPos": { "x": 0, "y": 28, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "max(hikaricp_connections_active{namespace=\"npd-fineract\"})",
+          "legendFormat": "active",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "max(hikaricp_connections_idle{namespace=\"npd-fineract\"})",
+          "legendFormat": "idle",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "max(hikaricp_connections_pending{namespace=\"npd-fineract\"})",
+          "legendFormat": "pending",
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "max(hikaricp_connections_max{namespace=\"npd-fineract\"})",
+          "legendFormat": "max",
+          "refId": "D",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "JVM heap used",
+      "gridPos": { "x": 8, "y": 28, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(jvm_memory_used_bytes{namespace=\"npd-fineract\",area=\"heap\"}) by (id)",
+          "legendFormat": "{{id}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(jvm_memory_max_bytes{namespace=\"npd-fineract\",area=\"heap\"})",
+          "legendFormat": "max",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 42,
+      "type": "timeseries",
+      "title": "Logback errors / WARN",
+      "gridPos": { "x": 16, "y": 28, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(logback_events_total{namespace=\"npd-fineract\",level=\"error\"}[5m]))",
+          "legendFormat": "error",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        },
+        {
+          "expr": "sum(rate(logback_events_total{namespace=\"npd-fineract\",level=\"warn\"}[5m]))",
+          "legendFormat": "warn",
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ops" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    },
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "Top slow / hot URIs (RPS)",
+      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "topk(15, sum(rate(http_server_requests_seconds_count{namespace=\"npd-fineract\",application=\"fineract\"}[5m])) by (uri, method, status))",
+          "legendFormat": "{{method}} {{status}} {{uri}}",
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" }
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "options": {},
+      "datasource": { "type": "prometheus", "uid": "${datasource}" }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": ["npd", "fineract", "http", "bpm"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "",
+  "title": "NPD Fineract",
+  "uid": "npd-fineract",
+  "version": 1,
+  "weekStart": ""
+}

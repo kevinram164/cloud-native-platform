@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - banking.yaml
   - shop.yaml
+  - fineract.yaml
   - infra.yaml
   # platform/ (nodes+disk+network+controlplane) + banking-kube-platform.yaml
   # → openshift-monitoring — apply riêng, cần cluster-admin:

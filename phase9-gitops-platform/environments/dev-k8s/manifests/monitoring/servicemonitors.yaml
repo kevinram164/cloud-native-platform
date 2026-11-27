@@ -232,3 +232,27 @@ spec:
     - port: minio-api
       path: /minio/v2/metrics/cluster
       interval: 60s
+---
+# Apache Fineract (Spring Boot Micrometer → /fineract-provider/actuator/prometheus)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fineract-server
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  namespaceSelector:
+    matchNames: [npd-fineract]
+  selector:
+    matchLabels:
+      app: fineract-server
+  endpoints:
+    - port: http
+      path: /fineract-provider/actuator/prometheus
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - action: labeldrop
+          regex: endpoint

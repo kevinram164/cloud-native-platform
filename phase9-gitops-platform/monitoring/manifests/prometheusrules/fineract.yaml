@@ -1,0 +1,82 @@
+# Fineract symptoms — REST Micrometer (không có T24 MDB counter).
+# Lab chính: environments/dev-k8s/manifests/monitoring/rules-apps.yaml (ns monitoring).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-fineract-alerts
+  namespace: npd-fineract
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+    role: alert-rules
+spec:
+  groups:
+    - name: fineract.symptoms
+      rules:
+        - alert: FineractServer5xx
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",status=~"5.."}[5m])) > 0
+          for: 1m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            impact: api
+            namespace: npd-fineract
+          annotations:
+            summary: "Fineract API trả 5xx"
+            description: "Có HTTP 5xx trên fineract-server."
+
+        - alert: FineractTransferErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*accounttransfers.*",status=~"[45].."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            impact: transfer
+            namespace: npd-fineract
+          annotations:
+            summary: "Giao dịch chuyển tiền (accounttransfers) lỗi"
+            description: "4xx/5xx trên /accounttransfers."
+
+        - alert: FineractLoanBpmErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*/loans.*",status=~"[45].."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            impact: bpm-loan
+            namespace: npd-fineract
+          annotations:
+            summary: "BPM loan lỗi"
+            description: "4xx/5xx trên /loans*."
+
+        - alert: FineractSavingsTxnErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*savingsaccounts.*/transactions.*",status=~"[45].."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: warning
+            team: fineract
+            tier: symptom
+            impact: savings
+            namespace: npd-fineract
+          annotations:
+            summary: "Giao dịch savings lỗi"
+            description: "4xx/5xx trên savingsaccounts/.../transactions."
+
+        - alert: FineractDbPoolSaturated
+          expr: |
+            max(hikaricp_connections_pending{namespace="npd-fineract"}) > 0
+          for: 5m
+          labels:
+            severity: critical
+            team: fineract
+            tier: cause
+            namespace: npd-fineract
+          annotations:
+            summary: "HikariCP có connection pending"
+            description: "Pool DB bão hòa — giao dịch sẽ chậm/lỗi."

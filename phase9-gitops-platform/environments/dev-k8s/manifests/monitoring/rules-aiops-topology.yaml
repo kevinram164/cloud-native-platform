@@ -1,5 +1,5 @@
 # AIOps Generic Webhook JSONata → resource.name = <deployment|pod|daemonset>/<namespace>
-# Phủ mọi ns workload + kube-system. Team fast-route: banking|shop|movie|platform|infra.
+# Phủ mọi ns workload + kube-system. Team fast-route: banking|shop|movie|fineract|platform|infra.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -14,7 +14,7 @@ spec:
         - alert: WorkloadTargetDown
           expr: |
             up{
-              namespace=~"npd-banking|npd-movie|npd-shop|postgres|redis|rabbit|kafka|kong|minio|vault|keycloak|platform|argocd|monitoring|observability|elastic-system|haproxy-ingress|concert|kube-system"
+              namespace=~"npd-banking|npd-movie|npd-shop|npd-fineract|postgres|redis|rabbit|kafka|kong|minio|vault|keycloak|platform|argocd|monitoring|observability|elastic-system|haproxy-ingress|concert|kube-system"
             } == 0
           for: 3m
           labels:
@@ -23,7 +23,7 @@ spec:
             namespace: "{{ $labels.namespace }}"
             deployment: "{{ with $labels.service }}{{ . }}{{ else }}{{ $labels.job }}{{ end }}"
             pod: "{{ $labels.pod }}"
-            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"npd-fineract\" }}fineract{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
           annotations:
             summary: "{{ $labels.namespace }}/{{ with $labels.service }}{{ . }}{{ else }}{{ $labels.job }}{{ end }} không scrape được"
             description: >-
@@ -35,11 +35,11 @@ spec:
         - alert: WorkloadDeploymentUnavailable
           expr: |
             kube_deployment_status_replicas_unavailable{
-              namespace=~"npd-banking|npd-movie|npd-shop|platform|argocd|vault|keycloak|kong|minio|observability|elastic-system|haproxy-ingress|concert|monitoring|kube-system"
+              namespace=~"npd-banking|npd-movie|npd-shop|npd-fineract|platform|argocd|vault|keycloak|kong|minio|observability|elastic-system|haproxy-ingress|concert|monitoring|kube-system"
             } > 0
             and
             kube_deployment_spec_replicas{
-              namespace=~"npd-banking|npd-movie|npd-shop|platform|argocd|vault|keycloak|kong|minio|observability|elastic-system|haproxy-ingress|concert|monitoring|kube-system"
+              namespace=~"npd-banking|npd-movie|npd-shop|npd-fineract|platform|argocd|vault|keycloak|kong|minio|observability|elastic-system|haproxy-ingress|concert|monitoring|kube-system"
             } > 0
           for: 5m
           labels:
@@ -47,7 +47,7 @@ spec:
             tier: kube
             namespace: "{{ $labels.namespace }}"
             deployment: "{{ $labels.deployment }}"
-            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"npd-fineract\" }}fineract{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
           annotations:
             summary: "{{ $labels.namespace }}/{{ $labels.deployment }} unavailable"
             description: "desired>0 nhưng unavailable>0 — crash/probe/ImagePull/vault-agent-init."
@@ -97,7 +97,7 @@ spec:
         - alert: WorkloadPodRestarting
           expr: |
             increase(kube_pod_container_status_restarts_total{
-              namespace=~"npd-banking|npd-movie|npd-shop|platform|argocd|vault|keycloak|kong|postgres|redis|rabbit|kafka|minio|observability|monitoring|elastic-system|haproxy-ingress|concert|kube-system"
+              namespace=~"npd-banking|npd-movie|npd-shop|npd-fineract|platform|argocd|vault|keycloak|kong|postgres|redis|rabbit|kafka|minio|observability|monitoring|elastic-system|haproxy-ingress|concert|kube-system"
             }[15m]) > 3
           for: 5m
           labels:
@@ -106,7 +106,7 @@ spec:
             namespace: "{{ $labels.namespace }}"
             pod: "{{ $labels.pod }}"
             deployment: "{{ $labels.pod }}"
-            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
+            team: "{{ if eq $labels.namespace \"npd-banking\" }}banking{{ else if eq $labels.namespace \"npd-movie\" }}movie{{ else if eq $labels.namespace \"npd-shop\" }}shop{{ else if eq $labels.namespace \"npd-fineract\" }}fineract{{ else if eq $labels.namespace \"kube-system\" }}platform{{ else }}infra{{ end }}"
           annotations:
             summary: "{{ $labels.namespace }}/{{ $labels.pod }} restart liên tục"
             description: "Container {{ $labels.container }} >3 restart/15m (kube-system: cilium/coredns/kube-proxy)."

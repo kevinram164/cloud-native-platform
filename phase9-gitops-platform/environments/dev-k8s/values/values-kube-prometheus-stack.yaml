@@ -137,7 +137,7 @@ alertmanager:
           continue: true
         # Ứng dụng: báo nhanh, nhắc lại 30 phút
         - receiver: telegram
-          matchers: ['team =~ "banking|shop|movie"']
+          matchers: ['team =~ "banking|shop|movie|fineract"']
           group_by: [alertname]
           group_wait: 10s
           group_interval: 1m

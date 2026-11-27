@@ -186,3 +186,193 @@ spec:
             description: "Gần bằng độ dài segment thì buffer cạn. So với MinIO GET TTFB và băng thông tunnel."
 
     # DeploymentUnavailable / PodRestarting → Workload* trong rules-aiops-topology.yaml
+---
+# Apache Fineract (npd-fineract). Metric: Spring Boot Micrometer http_server_requests_* + hikaricp_* + logback_*.
+# Transfer/BPM đo qua REST URI (không có T24 MDB counter). Alert → Telegram (team=fineract).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: npd-fineract-alerts
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: npd-monitoring
+spec:
+  groups:
+    - name: fineract.symptoms
+      rules:
+        - alert: FineractServer5xx
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",status=~"5.."}[5m])) > 0
+          for: 1m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            impact: api
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "Fineract API trả 5xx"
+            description: >-
+              Có HTTP 5xx trên fineract-server. Xem Grafana NPD Fineract + Instana traces;
+              log pod: kubectl -n npd-fineract logs deploy/fineract-server --tail=200.
+
+        - alert: FineractHighErrorRate
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",outcome="SERVER_ERROR"}[5m]))
+              / clamp_min(sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract"}[5m])), 1e-9) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "Fineract SERVER_ERROR {{ $value | humanizePercentage }} (>5%)"
+            description: "Tỷ lệ lỗi server > 5% trong 5m — kiểm tra DB/pool, OOM, exception trong log."
+
+        - alert: FineractTransferErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*accounttransfers.*",status=~"[45].."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            impact: transfer
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "Giao dịch chuyển tiền (accounttransfers) lỗi"
+            description: >-
+              4xx/5xx trên /accounttransfers (V1 synthetic / teller transfer).
+              Instana filter X-Business-Flow=txn.transfer; Grafana panel BPM lỗi.
+
+        - alert: FineractSavingsTxnErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*savingsaccounts.*/transactions.*",status=~"[45].."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: warning
+            team: fineract
+            tier: symptom
+            impact: savings
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "Giao dịch savings (deposit/withdraw) lỗi"
+            description: "4xx/5xx trên savingsaccounts/.../transactions (V2/V3). Kiểm tra balance/product/currency."
+
+        - alert: FineractLoanBpmErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*/loans.*",status=~"[45].."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: critical
+            team: fineract
+            tier: symptom
+            impact: bpm-loan
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "BPM loan (apply/approve/disburse/repay) lỗi"
+            description: >-
+              4xx/5xx trên /loans* (B2/B3). Correlate X-Business-Flow=bpm.loan.* và X-Correlation-ID trên Instana.
+
+        - alert: FineractClientOnboardErrors
+          expr: |
+            sum(rate(http_server_requests_seconds_count{namespace="npd-fineract",application="fineract",uri=~".*/clients.*",status=~"5.."}[5m])) > 0
+          for: 2m
+          labels:
+            severity: warning
+            team: fineract
+            tier: symptom
+            impact: bpm-onboard
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "BPM onboard client 5xx"
+            description: "5xx trên /clients* (B1). 4xx validation không alert (noise)."
+
+        - alert: FineractSlowApi
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le) (rate(http_server_requests_seconds_bucket{namespace="npd-fineract",application="fineract"}[5m]))
+            ) > 5
+          for: 10m
+          labels:
+            severity: warning
+            team: fineract
+            tier: symptom
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "Fineract API p95 {{ $value | humanizeDuration }} (>5s)"
+            description: "Latency cao — kiểm tra HikariCP, Postgres, CPU/heap trên dashboard NPD Fineract."
+
+    - name: fineract.system
+      rules:
+        - alert: FineractDbPoolSaturated
+          expr: |
+            max(hikaricp_connections_pending{namespace="npd-fineract"}) > 0
+            or
+            (
+              max(hikaricp_connections_active{namespace="npd-fineract"})
+                / clamp_min(max(hikaricp_connections_max{namespace="npd-fineract"}), 1)
+            ) > 0.9
+          for: 5m
+          labels:
+            severity: critical
+            team: fineract
+            tier: cause
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "HikariCP pool gần cạn / có pending"
+            description: "DB connection sát max hoặc pending>0 — giao dịch sẽ timeout/5xx."
+
+        - alert: FineractJvmHeapHigh
+          expr: |
+            sum(jvm_memory_used_bytes{namespace="npd-fineract",area="heap"})
+              / clamp_min(sum(jvm_memory_max_bytes{namespace="npd-fineract",area="heap"}), 1) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+            team: fineract
+            tier: cause
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "JVM heap Fineract > 90%"
+            description: "Nguy cơ OOM / GC thrash. Xem JAVA_TOOL_OPTIONS -Xmx và memory limit pod."
+
+        - alert: FineractLogErrors
+          expr: |
+            sum(rate(logback_events_total{namespace="npd-fineract",level="error"}[5m])) > 0.2
+          for: 5m
+          labels:
+            severity: warning
+            team: fineract
+            tier: symptom
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "Fineract log ERROR ~{{ $value | humanize }} /s"
+            description: "Logback error rate cao — grep exception trong pod log / Instana Error Messages."
+
+        - alert: FineractDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{namespace="npd-fineract",deployment="fineract-server"} > 0
+            and
+            kube_deployment_spec_replicas{namespace="npd-fineract",deployment="fineract-server"} > 0
+          for: 5m
+          labels:
+            severity: critical
+            team: fineract
+            tier: kube
+            namespace: npd-fineract
+            deployment: fineract-server
+          annotations:
+            summary: "fineract-server unavailable"
+            description: "desired>0 nhưng unavailable>0 — crash/probe/ImagePull/vault-agent-init."

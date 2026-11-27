@@ -41,6 +41,9 @@ configMapGenerator:
   - name: dashboard-npd-movie
     files: [dashboards/npd-movie.json]
     options: *dashboard
+  - name: dashboard-npd-fineract
+    files: [dashboards/npd-fineract.json]
+    options: *dashboard
   # Script báo cáo Telegram 8h/15h/22h (digest/cronjob.yaml)
   - name: npd-status-digest-script
     files: [digest/report.py]
